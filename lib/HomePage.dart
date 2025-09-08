@@ -76,10 +76,10 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
       final raw = await LocalStorageService.getTransactions();
       final txns = raw.map((m) => _transactionFromMap(m)).toList();
       txns.sort((a, b) => b.date.compareTo(a.date));
-      setState(() {
+        setState(() {
         _recentTransactions = txns.take(5).toList();
-        _isLoadingTransactions = false;
-      });
+          _isLoadingTransactions = false;
+        });
     } catch (e) {
       setState(() {
         _isLoadingTransactions = false;
@@ -352,51 +352,57 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFF032221),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddTransactionDialog,
-        backgroundColor: Colors.green,
-        child: Icon(Icons.add, color: Colors.white),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          FloatingActionButton.small(
+            heroTag: 'settings_fab_parallel',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => SettingsScreen()),
+              );
+            },
+            backgroundColor: Colors.white.withOpacity(0.12),
+            child: Icon(Icons.settings, color: Colors.white),
+          ),
+          FloatingActionButton(
+            heroTag: 'add_txn_fab',
+            onPressed: _showAddTransactionDialog,
+            backgroundColor: Colors.green,
+            child: Icon(Icons.add, color: Colors.white),
+          ),
+        ],
       ),
-      bottomNavigationBar: Padding(
-        padding: EdgeInsets.only(left: 16, right: 16, bottom: 8),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            FloatingActionButton.small(
-              heroTag: 'settings_fab',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => SettingsScreen()),
-                );
-              },
-              backgroundColor: Colors.white.withOpacity(0.1),
-              child: Icon(Icons.settings, color: Colors.white),
-            ),
-            SizedBox(width: 48),
-          ],
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF032221), Colors.black, Color(0xFF032221)],
+          ),
         ),
-      ),
-      body: SafeArea(
+        child: SafeArea(
         child: SingleChildScrollView(
           padding: EdgeInsets.only(bottom: 20),
           child: Column(
             children: [
               // Header with Vaultic title and logout
               _buildHeader(),
-
-              // Horizontal categories and totals section
-              _buildSummarySection(),
-
+              
+                // Horizontal categories and totals section
+                _buildSummarySection(),
+              
               // Transactions section
               _buildTransactionsSection(),
-
+              
               // Footer links
               _buildFooter(),
             ],
           ),
         ),
+      ),
       ),
     );
   }
@@ -576,10 +582,10 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
     return DefaultTabController(
       length: 4,
       child: Container(
-        margin: EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      margin: EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
             TabBar(
               isScrollable: false,
               labelColor: Colors.green,
@@ -705,17 +711,17 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: Colors.white.withOpacity(0.1)),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
                         _formatMonthLabel(e.key),
-                        style: GoogleFonts.nunito(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
+                  style: GoogleFonts.nunito(
+                    color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
                       ),
+                    ),
                       Text(
                         '₹${e.value.toStringAsFixed(0)}',
                         style: GoogleFonts.nunito(
@@ -723,9 +729,9 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
-                      ),
-                    ],
-                  ),
+                ),
+              ],
+            ),
                 );
               }).toList(),
         );
@@ -763,14 +769,14 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
     return Column(
       children:
           _recentTransactions.map((transaction) {
-            return _buildTransactionItem(transaction);
-          }).toList(),
+        return _buildTransactionItem(transaction);
+      }).toList(),
     );
   }
 
   Widget _buildTransactionItem(Transaction transaction) {
     final isCredit = transaction.type == 'Credit';
-
+    
     return Container(
       margin: EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -917,7 +923,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     final difference = now.difference(date).inDays;
-
+    
     if (difference == 0) {
       return 'Today';
     } else if (difference == 1) {

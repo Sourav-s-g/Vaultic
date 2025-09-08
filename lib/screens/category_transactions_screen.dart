@@ -12,7 +12,6 @@ class CategoryTransactionsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF032221),
       appBar: AppBar(
         title: Text(
           allDebit ? 'This Month Spent' : category,
@@ -22,34 +21,43 @@ class CategoryTransactionsScreen extends StatelessWidget {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: LocalStorageService.getTransactions(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.green)));
-          }
-          final now = DateTime.now();
-          final txns = snapshot.data!
-              .map(_transactionFromMap)
-              .where((t) {
-                final inMonth = t.date.year == now.year && t.date.month == now.month;
-                if (!inMonth) return false;
-                if (allDebit) return t.type == 'Debit';
-                return t.type == 'Debit' && (t.category == category);
-              })
-              .toList()
-            ..sort((a,b)=> b.date.compareTo(a.date));
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF032221), Colors.black, Color(0xFF032221)],
+          ),
+        ),
+        child: FutureBuilder<List<Map<String, dynamic>>>(
+          future: LocalStorageService.getTransactions(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.green)));
+            }
+            final now = DateTime.now();
+            final txns = snapshot.data!
+                .map(_transactionFromMap)
+                .where((t) {
+                  final inMonth = t.date.year == now.year && t.date.month == now.month;
+                  if (!inMonth) return false;
+                  if (allDebit) return t.type == 'Debit';
+                  return t.type == 'Debit' && (t.category == category);
+                })
+                .toList()
+              ..sort((a,b)=> b.date.compareTo(a.date));
 
-          if (txns.isEmpty) {
-            return _emptyWidget();
-          }
+            if (txns.isEmpty) {
+              return _emptyWidget();
+            }
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: txns.length,
-            itemBuilder: (context, index) => _txTile(txns[index]),
-          );
-        },
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: txns.length,
+              itemBuilder: (context, index) => _txTile(txns[index]),
+            );
+          },
+        ),
       ),
     );
   }

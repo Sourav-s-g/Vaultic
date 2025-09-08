@@ -21,25 +21,33 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF032221),
       appBar: AppBar(
         title: Text('Settings', style: GoogleFonts.nunito(color: Colors.white, fontWeight: FontWeight.w600)),
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _tile(context, Icons.policy, 'Terms and Conditions', (){
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const TermsScreen()));
-          }),
-          _tile(context, Icons.privacy_tip, 'Safety and Privacy Policy', (){
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyScreen()));
-          }),
-          const Divider(color: Colors.white24),
-          _tile(context, Icons.delete_forever, 'Clear Local Data', (){ _clearLocalData(context); }),
-        ],
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF032221), Colors.black, Color(0xFF032221)],
+          ),
+        ),
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            _tile(context, Icons.policy, 'Terms and Conditions', (){
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const TermsScreen()));
+            }),
+            _tile(context, Icons.privacy_tip, 'Safety and Privacy Policy', (){
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyScreen()));
+            }),
+            const Divider(color: Colors.white24),
+            _tile(context, Icons.delete_forever, 'Clear Local Data', (){ _clearLocalData(context); }),
+          ],
+        ),
       ),
     );
   }
