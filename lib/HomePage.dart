@@ -53,7 +53,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
   void initState() {
     super.initState();
     _loadCategories();
-    _loadRecentTransactions();
+    _loadAllTransactions();
   }
 
   Future<void> _loadCategories() async {
@@ -67,25 +67,6 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
     });
   }
 
-  Future<void> _loadRecentTransactions() async {
-    setState(() {
-      _isLoadingTransactions = true;
-    });
-
-    try {
-      final raw = await LocalStorageService.getTransactions();
-      final txns = raw.map((m) => _transactionFromMap(m)).toList();
-      txns.sort((a, b) => b.date.compareTo(a.date));
-      setState(() {
-        _recentTransactions = txns.take(5).toList();
-        _isLoadingTransactions = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isLoadingTransactions = false;
-      });
-    }
-  }
 
   void logout() async {
     try {
@@ -108,7 +89,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
       MaterialPageRoute(builder: (context) => TransactionHistoryScreen()),
     ).then((_) {
       _loadCategories();
-      _loadRecentTransactions();
+      _loadAllTransactions();
     });
   }
 
@@ -420,7 +401,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
         'splitCount': type == 'Debit' && isSplit ? splitCount : 1,
       };
       await LocalStorageService.addTransaction(txnMap);
-      _loadRecentTransactions();
+      _loadAllTransactions();
     }
   }
 
@@ -1020,15 +1001,27 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
   List<Transaction> _recentAndAllTransactionsCache = [];
 
   List<Transaction> _recentAndAllTransactions() {
-    // Fetch all transactions from storage to compute totals
-    // Note: this is a sync cache built from last load of recent + full store when needed
-    // For simplicity, rebuild each call (data size is small for local app)
-    // In production, optimize by caching.
-    // This method is synchronous wrapper around async storage by using last fetched recent if available.
-    // We'll just return recent list as approximation if full list isn't loaded.
+    // Return cached transactions if available, otherwise return recent transactions as fallback
     return _recentAndAllTransactionsCache.isNotEmpty
         ? _recentAndAllTransactionsCache
         : _recentTransactions;
+  }
+
+  Future<void> _loadAllTransactions() async {
+    try {
+      final raw = await LocalStorageService.getTransactions();
+      final txns = raw.map((m) => _transactionFromMap(m)).toList();
+      txns.sort((a, b) => b.date.compareTo(a.date));
+      setState(() {
+        _recentAndAllTransactionsCache = txns;
+        _recentTransactions = txns.take(5).toList();
+        _isLoadingTransactions = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingTransactions = false;
+      });
+    }
   }
 
   String _formatMonthLabel(String ym) {
