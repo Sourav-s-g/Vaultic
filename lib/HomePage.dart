@@ -76,10 +76,10 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
       final raw = await LocalStorageService.getTransactions();
       final txns = raw.map((m) => _transactionFromMap(m)).toList();
       txns.sort((a, b) => b.date.compareTo(a.date));
-        setState(() {
+      setState(() {
         _recentTransactions = txns.take(5).toList();
-          _isLoadingTransactions = false;
-        });
+        _isLoadingTransactions = false;
+      });
     } catch (e) {
       setState(() {
         _isLoadingTransactions = false;
@@ -163,10 +163,11 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
           (ctx) => StatefulBuilder(
             builder:
                 (ctx, setStateSb) => AlertDialog(
+                  backgroundColor: const Color(0xFF0E1F1F),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  title: Text('New Transaction'),
+                  title: Text('New Transaction', style: GoogleFonts.nunito(color: Colors.white)),
                   content: SingleChildScrollView(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -177,10 +178,17 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
+                          style: TextStyle(color: Colors.white),
                           decoration: InputDecoration(
                             labelText: 'Amount',
-                            prefixIcon: Icon(Icons.currency_rupee),
-                            border: OutlineInputBorder(
+                            labelStyle: TextStyle(color: Colors.white70),
+                            prefixIcon: Icon(Icons.currency_rupee, color: Colors.white70),
+                            enabledBorder: OutlineInputBorder(
+                              borderSide: BorderSide(color: Colors.white24),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: BorderSide(color: Colors.green),
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
@@ -188,10 +196,17 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                         SizedBox(height: 12),
                         TextField(
                           controller: descriptionController,
+                          style: TextStyle(color: Colors.white),
                           decoration: InputDecoration(
                             labelText: 'Description',
-                            prefixIcon: Icon(Icons.edit_note),
-                            border: OutlineInputBorder(
+                            labelStyle: TextStyle(color: Colors.white70),
+                            prefixIcon: Icon(Icons.edit_note, color: Colors.white70),
+                            enabledBorder: OutlineInputBorder(
+                              borderSide: BorderSide(color: Colors.white24),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: BorderSide(color: Colors.green),
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
@@ -204,7 +219,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                                   .map(
                                     (e) => DropdownMenuItem(
                                       value: e,
-                                      child: Text(e),
+                                      child: Text(e, style: TextStyle(color: Colors.white)),
                                     ),
                                   )
                                   .toList(),
@@ -213,11 +228,18 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                           },
                           decoration: InputDecoration(
                             labelText: 'Type',
-                            prefixIcon: Icon(Icons.swap_vert),
-                            border: OutlineInputBorder(
+                            labelStyle: TextStyle(color: Colors.white70),
+                            prefixIcon: Icon(Icons.swap_vert, color: Colors.white70),
+                            enabledBorder: OutlineInputBorder(
+                              borderSide: BorderSide(color: Colors.white24),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: BorderSide(color: Colors.green),
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
+                          dropdownColor: const Color(0xFF0E1F1F),
                         ),
                         if (type == 'Debit') ...[
                           SizedBox(height: 12),
@@ -228,7 +250,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                                     .map(
                                       (e) => DropdownMenuItem(
                                         value: e,
-                                        child: Text(e),
+                                        child: Text(e, style: TextStyle(color: Colors.white)),
                                       ),
                                     )
                                     .toList(),
@@ -237,11 +259,18 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                             },
                             decoration: InputDecoration(
                               labelText: 'Category',
-                              prefixIcon: Icon(Icons.category),
-                              border: OutlineInputBorder(
+                              labelStyle: TextStyle(color: Colors.white70),
+                              prefixIcon: Icon(Icons.category, color: Colors.white70),
+                              enabledBorder: OutlineInputBorder(
+                                borderSide: BorderSide(color: Colors.white24),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderSide: BorderSide(color: Colors.green),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
+                            dropdownColor: const Color(0xFF0E1F1F),
                           ),
                           SizedBox(height: 12),
                           Row(
@@ -356,22 +385,29 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
       floatingActionButton: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          FloatingActionButton.small(
-            heroTag: 'settings_fab_parallel',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => SettingsScreen()),
-              );
-            },
-            backgroundColor: Colors.white.withOpacity(0.12),
-            child: Icon(Icons.settings, color: Colors.white),
+          Padding(
+            padding: const EdgeInsets.only(left: 16.0), // margin on left button
+            child: FloatingActionButton(
+              heroTag: 'settings_fab_parallel',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => SettingsScreen()),
+                );
+              },
+              backgroundColor: Colors.green,
+              child: Icon(Icons.settings, color: Colors.white),
+            ),
           ),
-          FloatingActionButton(
-            heroTag: 'add_txn_fab',
-            onPressed: _showAddTransactionDialog,
-            backgroundColor: Colors.green,
-            child: Icon(Icons.add, color: Colors.white),
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            // margin on right button
+            child: FloatingActionButton(
+              heroTag: 'add_txn_fab',
+              onPressed: _showAddTransactionDialog,
+              backgroundColor: Colors.green,
+              child: Icon(Icons.add, color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -384,25 +420,25 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
           ),
         ),
         child: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.only(bottom: 20),
-          child: Column(
-            children: [
-              // Header with Vaultic title and logout
-              _buildHeader(),
-              
+          child: SingleChildScrollView(
+            padding: EdgeInsets.only(bottom: 20),
+            child: Column(
+              children: [
+                // Header with Vaultic title and logout
+                _buildHeader(),
+
                 // Horizontal categories and totals section
                 _buildSummarySection(),
-              
-              // Transactions section
-              _buildTransactionsSection(),
-              
-              // Footer links
-              _buildFooter(),
-            ],
+
+                // Transactions section
+                _buildTransactionsSection(),
+
+                // Footer links
+                _buildFooter(),
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }
@@ -582,10 +618,10 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
     return DefaultTabController(
       length: 4,
       child: Container(
-      margin: EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+        margin: EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             TabBar(
               isScrollable: false,
               labelColor: Colors.green,
@@ -625,7 +661,34 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
       );
     }
     if (_recentTransactions.isEmpty) return _buildEmptyTransactionsWidget();
-    return SingleChildScrollView(child: _buildRecentTransactionsList());
+
+    final items = _recentTransactions.take(4).toList();
+    return ListView(
+      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      children: [
+        ...items.map(_buildTransactionItem).toList(),
+        InkWell(
+          onTap: _navigateToTransactionHistory,
+          child: Container(
+            margin: EdgeInsets.only(top: 8),
+            padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.06),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withOpacity(0.1)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('View all', style: GoogleFonts.nunito(color: Colors.green, fontSize: 16, fontWeight: FontWeight.w600)),
+                SizedBox(width: 6),
+                Icon(Icons.arrow_forward_ios, color: Colors.green, size: 16),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildTabSplits() {
@@ -711,17 +774,17 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: Colors.white.withOpacity(0.1)),
                   ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
                         _formatMonthLabel(e.key),
-                  style: GoogleFonts.nunito(
-                    color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+                        style: GoogleFonts.nunito(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
                       Text(
                         '₹${e.value.toStringAsFixed(0)}',
                         style: GoogleFonts.nunito(
@@ -729,9 +792,9 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
-                ),
-              ],
-            ),
+                      ),
+                    ],
+                  ),
                 );
               }).toList(),
         );
@@ -769,14 +832,14 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
     return Column(
       children:
           _recentTransactions.map((transaction) {
-        return _buildTransactionItem(transaction);
-      }).toList(),
+            return _buildTransactionItem(transaction);
+          }).toList(),
     );
   }
 
   Widget _buildTransactionItem(Transaction transaction) {
     final isCredit = transaction.type == 'Credit';
-    
+
     return Container(
       margin: EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -923,7 +986,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     final difference = now.difference(date).inDays;
-    
+
     if (difference == 0) {
       return 'Today';
     } else if (difference == 1) {
@@ -938,21 +1001,9 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
   Widget _buildFooter() {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      child: Row(
+      child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          InkWell(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => TermsScreen()),
-              );
-            },
-            child: Text(
-              'Terms and Conditions | ',
-              style: GoogleFonts.nunito(color: Colors.blueAccent, fontSize: 14),
-            ),
-          ),
           InkWell(
             onTap: () {
               Navigator.push(
@@ -961,7 +1012,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
               );
             },
             child: Text(
-              'Safety and Privacy Policy',
+              'Safety & Privacy Policy',
               style: GoogleFonts.nunito(color: Colors.blueAccent, fontSize: 14),
             ),
           ),

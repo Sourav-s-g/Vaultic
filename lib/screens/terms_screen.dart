@@ -7,11 +7,23 @@ class TermsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Terms and Conditions', style: GoogleFonts.nunito(color: Colors.white, fontWeight: FontWeight.w600)),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
+      appBar: PreferredSize(
+        preferredSize: Size.fromHeight(kToolbarHeight),
+        child: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF032221), Colors.black],
+            ),
+          ),
+          child: AppBar(
+            title: Text('Terms and Conditions', style: GoogleFonts.nunito(color: Colors.white, fontWeight: FontWeight.w600)),
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            iconTheme: const IconThemeData(color: Colors.white),
+          ),
+        ),
       ),
       body: Container(
         decoration: const BoxDecoration(
