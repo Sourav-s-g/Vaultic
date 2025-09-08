@@ -7,6 +7,9 @@ import 'screens/category_management_screen.dart';
 import 'models/transaction_history_model.dart';
 import 'services/local_storage.dart';
 import 'screens/category_transactions_screen.dart';
+import 'screens/terms_screen.dart';
+import 'screens/privacy_screen.dart';
+import 'screens/settings_screen.dart';
 import 'screens/settings_screen.dart';
 
 class Homepage extends StatelessWidget {
