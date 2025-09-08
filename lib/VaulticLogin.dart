@@ -63,8 +63,10 @@ class _VaulticloginState extends State<Vaulticlogin> {
           end: Alignment.bottomCenter,
           colors: [
             Color(0xFF032221),
+            Color(0xFF032221),
             Colors.black,
-            Color(0xFF032221), // Olive Green hex code
+            Color(0xFF032221),
+            Color(0xFF032221),// Olive Green hex code
           ],
         ),
       ),
@@ -111,7 +113,7 @@ class _VaulticloginState extends State<Vaulticlogin> {
 
               // Login Button
               ElevatedButton(
-                onPressed: _sendOtp,
+                onPressed: _isLoading ? null : _sendOtp,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white.withOpacity(0.1),
                   padding: const EdgeInsets.symmetric(vertical: 16),
@@ -119,14 +121,37 @@ class _VaulticloginState extends State<Vaulticlogin> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: Text(
-                  'Confirm',
-                  style: GoogleFonts.openSans(
-                    fontSize: 24,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                child: _isLoading
+                    ? Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          ),
+                          SizedBox(width: 12),
+                          Text(
+                            'Sending OTP...',
+                            style: GoogleFonts.openSans(
+                              fontSize: 20,
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      )
+                    : Text(
+                        'Confirm',
+                        style: GoogleFonts.openSans(
+                          fontSize: 24,
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
               ),
               const SizedBox(height: 32),
 

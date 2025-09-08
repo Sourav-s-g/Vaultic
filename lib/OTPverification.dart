@@ -5,9 +5,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'Auth_Service.dart';
 import 'package:pin_code_fields/pin_code_fields.dart';
 import 'dart:async';
+import 'HomePage.dart';
+import 'screens/app_setup_screen.dart';
+import 'services/local_storage.dart';
 
 // Make sure Profile_Page exists in your project, or replace accordingly.
-import 'HomePage.dart';
+import 'screens/transaction_history_screen.dart';
 
 class OTPVerification extends StatefulWidget {
   final String email; // Accepts email as a named parameter
@@ -38,15 +41,17 @@ class _OTPVerificationState extends State<OTPVerification> {
       // After sign out, navigate to login page and clear stack
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => Vaulticlogin()), // Replace with your login page class
-            (Route<dynamic> route) => false,
+        MaterialPageRoute(builder: (_) => Vaulticlogin()),
+        // Replace with your login page class
+        (Route<dynamic> route) => false,
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Logout failed.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Logout failed.')));
     }
   }
+
   void startTimer() {
     _secondsRemaining = 60;
     _canResend = false;
@@ -80,6 +85,16 @@ class _OTPVerificationState extends State<OTPVerification> {
     }
   }
 
+  /// Check if user has completed local app setup (categories exist locally)
+  Future<bool> _hasLocalAppSetup() async {
+    try {
+      final categories = await LocalStorageService.getCategories();
+      return categories.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -90,7 +105,7 @@ class _OTPVerificationState extends State<OTPVerification> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFF032221), Colors.black, Color(0xFF032221)],
+            colors: [Colors.black, Color(0xFF032221)],
           ),
         ),
         child: Center(
@@ -114,18 +129,17 @@ class _OTPVerificationState extends State<OTPVerification> {
                       ),
                     ),
                     Text(
-                      "Enter the OTP",
+                      "Enter OTP",
                       style: GoogleFonts.nunito(
                         color: Colors.white,
-                        fontWeight: FontWeight.bold,
                         fontSize: 38,
                       ),
                     ),
                   ],
                 ),
-                SizedBox(height: 20),
+                SizedBox(height: 60),
                 Container(
-                  padding: EdgeInsets.symmetric(horizontal: 30),
+                  padding: EdgeInsets.symmetric(horizontal: 1),
                   child: PinCodeTextField(
                     textStyle: TextStyle(
                       color: Colors.white, // Set your desired color here
@@ -138,6 +152,7 @@ class _OTPVerificationState extends State<OTPVerification> {
                     animationType: AnimationType.fade,
                     keyboardType: TextInputType.number,
                     pinTheme: PinTheme(
+                      fieldOuterPadding: EdgeInsets.symmetric(horizontal: 5),
                       shape: PinCodeFieldShape.box,
                       borderRadius: BorderRadius.circular(5),
                       fieldHeight: 50,
@@ -161,11 +176,25 @@ class _OTPVerificationState extends State<OTPVerification> {
 
                         if (response.session != null) {
                           // OTP verified successfully
-                          print("OTP Verified, Redirecting");
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(builder: (_) => Homepage()),
+                          print(
+                            "OTP Verified, Checking bank connection status",
                           );
+
+                          // Decide next based on local app setup
+                          final hasAppSetup = await _hasLocalAppSetup();
+                          if (hasAppSetup) {
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(builder: (_) => Homepage()),
+                            );
+                          } else {
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => AppSetupScreen(userEmail: widget.email),
+                              ),
+                            );
+                          }
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
@@ -181,7 +210,7 @@ class _OTPVerificationState extends State<OTPVerification> {
                     },
                   ),
                 ),
-                SizedBox(height: 20),
+                SizedBox(height: 30),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -209,6 +238,35 @@ class _OTPVerificationState extends State<OTPVerification> {
                         ),
                   ],
                 ),
+                SizedBox(height: 30),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.white.withOpacity(0.08),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        "Thank you for registering with us!",
+                        style: GoogleFonts.nunito(
+                          color: Colors.white,
+                          fontSize: 14,
+                        ),
+                      ),
+                      SizedBox(height: 10,),
+                      Text(
+                        "DO NOT SHARE THIS WITH ANYONE ELSE",
+                        style: GoogleFonts.nunito(
+                          color: Colors.white,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 100),
               ],
             ),
           ),
