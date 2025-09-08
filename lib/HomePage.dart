@@ -157,6 +157,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
     String? category = _categories.isNotEmpty ? _categories.first : null;
     bool isSplit = false;
     int splitCount = 2;
+    DateTime selectedDate = DateTime.now();
     final result = await showDialog<bool>(
       context: context,
       builder:
@@ -208,6 +209,52 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                             focusedBorder: OutlineInputBorder(
                               borderSide: BorderSide(color: Colors.green),
                               borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: 12),
+                        InkWell(
+                          onTap: () async {
+                            final date = await showDatePicker(
+                              context: ctx,
+                              initialDate: selectedDate,
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime.now().add(Duration(days: 365)),
+                              builder: (context, child) {
+                                return Theme(
+                                  data: Theme.of(context).copyWith(
+                                    colorScheme: ColorScheme.dark(
+                                      primary: Colors.green,
+                                      onPrimary: Colors.white,
+                                      surface: Color(0xFF0E1F1F),
+                                      onSurface: Colors.white,
+                                    ),
+                                  ),
+                                  child: child!,
+                                );
+                              },
+                            );
+                            if (date != null) {
+                              setStateSb(() => selectedDate = date);
+                            }
+                          },
+                          child: Container(
+                            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.white24),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.calendar_today, color: Colors.white70),
+                                SizedBox(width: 12),
+                                Text(
+                                  'Date: ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                                Spacer(),
+                                Icon(Icons.arrow_drop_down, color: Colors.white70),
+                              ],
                             ),
                           ),
                         ),
@@ -358,16 +405,15 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
     );
     if (result == true) {
       final amount = double.tryParse(amountController.text.trim()) ?? 0.0;
-      final now = DateTime.now();
       final txnMap = {
-        'transactionId': now.microsecondsSinceEpoch.toString(),
+        'transactionId': selectedDate.microsecondsSinceEpoch.toString(),
         'description':
             descriptionController.text.trim().isEmpty
                 ? 'Manual Entry'
                 : descriptionController.text.trim(),
         'amount': amount,
         'type': type,
-        'date': now.toIso8601String(),
+        'date': selectedDate.toIso8601String(),
         'category': type == 'Credit' ? '' : (category ?? 'General'),
         'status': 'Completed',
         'isSplit': type == 'Debit' ? isSplit : false,
@@ -504,6 +550,13 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
   }
 
   Widget _buildSummarySection() {
+    // Sort categories by amount (highest first) and create cards
+    final categoryCards = _categories.map((c) {
+      final amount = _getMonthlyTotalForCategory(c);
+      return MapEntry(c, amount);
+    }).toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
     return Container(
       height: 180,
       child: ListView(
@@ -519,14 +572,14 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
               _openCategoryTransactions('ALL_DEBIT');
             },
           ),
-          ..._categories.map(
-            (c) => _buildFeatureCard(
-              title: c,
-              amount: '₹${_getMonthlyTotalForCategory(c).toStringAsFixed(0)}',
+          ...categoryCards.map(
+            (entry) => _buildFeatureCard(
+              title: entry.key,
+              amount: '₹${entry.value.toStringAsFixed(0)}',
               icon: Icons.category,
-              color: Colors.blueGrey,
+              color: _getCategoryColor(entry.key),
               onTap: () {
-                _openCategoryTransactions(c);
+                _openCategoryTransactions(entry.key);
               },
             ),
           ),
@@ -631,7 +684,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                 Tab(text: 'Transactions'),
                 Tab(text: 'Splits'),
                 Tab(text: 'Credits'),
-                Tab(text: 'Previous'),
+                Tab(text: 'Monthly'),
               ],
             ),
             SizedBox(height: 12),
@@ -944,6 +997,24 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
               t.date.month == now.month,
         )
         .fold(0.0, (sum, t) => sum + (t.type == 'Debit' ? t.amount : 0.0));
+  }
+
+  Color _getCategoryColor(String category) {
+    // Generate consistent colors for categories
+    final colors = [
+      Colors.blue,
+      Colors.purple,
+      Colors.orange,
+      Colors.teal,
+      Colors.pink,
+      Colors.indigo,
+      Colors.cyan,
+      Colors.amber,
+      Colors.deepOrange,
+      Colors.lightBlue,
+    ];
+    final index = category.hashCode % colors.length;
+    return colors[index];
   }
 
   List<Transaction> _recentAndAllTransactionsCache = [];
