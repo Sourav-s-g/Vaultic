@@ -90,5 +90,17 @@ class Transaction {
       status: json['status'] ?? '',
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'transactionId': transactionId,
+      'description': description,
+      'amount': amount,
+      'type': type,
+      'date': date.toIso8601String(),
+      'category': category,
+      'status': status,
+    };
+  }
 }
 

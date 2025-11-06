@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../HomePage.dart';
-import '../services/local_storage.dart';
+import '../services/hybrid_storage_service.dart';
 
 class CategoryManagementScreen extends StatefulWidget {
   const CategoryManagementScreen({super.key});
@@ -47,7 +47,7 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
     });
 
     try {
-      final raw = await LocalStorageService.getCategories();
+      final raw = await HybridStorageService.getCategories();
       setState(() {
         _userCategories = raw.map((m) => SpendingCategory(name: (m['name'] ?? '').toString(), icon: Icons.category, color: Colors.grey)).toList();
         _isLoading = false;
@@ -74,8 +74,23 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
   }
 
   void _removeCategory(SpendingCategory category) {
-    setState(() {
-      _userCategories.remove(category);
+    showDialog<bool>(
+      context: context,
+      builder: (ctx)=> AlertDialog(
+        title: Text('Delete category?'),
+        content: Text('This will remove the category and its budget.'),
+        actions: [
+          TextButton(onPressed: ()=> Navigator.pop(ctx, false), child: Text('Cancel')),
+          TextButton(onPressed: ()=> Navigator.pop(ctx, true), child: Text('Delete', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    ).then((ok) async {
+      if (ok == true) {
+        setState(() {
+          _userCategories.remove(category);
+        });
+        await HybridStorageService.removeCategoryByName(category.name);
+      }
     });
   }
 
@@ -103,7 +118,7 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
     });
 
     try {
-      await LocalStorageService.saveCategories(_userCategories.map((c)=>{'name': c.name}).toList());
+      await HybridStorageService.saveCategories(_userCategories.map((c)=>{'name': c.name}).toList());
 
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
@@ -319,6 +334,7 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
   Widget _buildCategoryChip(SpendingCategory category, bool isCurrent) {
     return InkWell(
       onTap: isCurrent ? null : () => _addSuggestedCategory(category),
+      onLongPress: isCurrent ? () => _removeCategory(category) : null,
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
@@ -346,14 +362,20 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
                 fontWeight: isCurrent ? FontWeight.w600 : FontWeight.normal,
               ),
             ),
-            if (isCurrent && category.isCustom) ...[
+            if (isCurrent) ...[
               SizedBox(width: 8),
-              InkWell(
-                onTap: () => _removeCategory(category),
-                child: Icon(
-                  Icons.close,
-                  color: Colors.red,
-                  size: 16,
+              Container(
+                decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                child: InkWell(
+                  onTap: () => _removeCategory(category),
+                  child: Padding(
+                    padding: EdgeInsets.all(2),
+                    child: Icon(
+                      Icons.close,
+                      color: Colors.red,
+                      size: 18,
+                    ),
+                  ),
                 ),
               ),
             ],

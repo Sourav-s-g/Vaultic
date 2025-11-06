@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../HomePage.dart';
-import '../services/local_storage.dart';
+import '../services/hybrid_storage_service.dart';
 
 class AppSetupScreen extends StatefulWidget {
   final String userEmail;
@@ -101,7 +101,7 @@ class _AppSetupScreenState extends State<AppSetupScreen> {
       final payload = _selectedCategories.map((c) => {
         'name': c.name,
       }).toList();
-      await LocalStorageService.saveCategories(payload);
+      await HybridStorageService.saveCategories(payload);
 
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(

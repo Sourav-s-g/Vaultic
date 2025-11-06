@@ -7,7 +7,7 @@ import 'package:pin_code_fields/pin_code_fields.dart';
 import 'dart:async';
 import 'HomePage.dart';
 import 'screens/app_setup_screen.dart';
-import 'services/local_storage.dart';
+import 'services/hybrid_storage_service.dart';
 
 // Make sure Profile_Page exists in your project, or replace accordingly.
 import 'screens/transaction_history_screen.dart';
@@ -23,7 +23,6 @@ class OTPVerification extends StatefulWidget {
 
 class _OTPVerificationState extends State<OTPVerification> {
   final authservice = AuthService();
-  TextEditingController otpController = TextEditingController();
 
   int _secondsRemaining = 60;
   bool _canResend = false;
@@ -57,15 +56,23 @@ class _OTPVerificationState extends State<OTPVerification> {
     _canResend = false;
 
     _timer = Timer.periodic(Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
       if (_secondsRemaining == 0) {
-        setState(() {
-          _canResend = true;
-        });
+        if (mounted) {
+          setState(() {
+            _canResend = true;
+          });
+        }
         timer.cancel();
       } else {
-        setState(() {
-          _secondsRemaining--;
-        });
+        if (mounted) {
+          setState(() {
+            _secondsRemaining--;
+          });
+        }
       }
     });
   }
@@ -74,11 +81,13 @@ class _OTPVerificationState extends State<OTPVerification> {
   void resendOTP() async {
     try {
       await Supabase.instance.client.auth.signInWithOtp(email: widget.email);
+      if (!mounted) return;
       startTimer();
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('OTP resent to ${widget.email}')));
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Error resending OTP: $e')));
@@ -88,7 +97,7 @@ class _OTPVerificationState extends State<OTPVerification> {
   /// Check if user has completed local app setup (categories exist locally)
   Future<bool> _hasLocalAppSetup() async {
     try {
-      final categories = await LocalStorageService.getCategories();
+      final categories = await HybridStorageService.getCategories();
       return categories.isNotEmpty;
     } catch (_) {
       return false;
@@ -147,7 +156,6 @@ class _OTPVerificationState extends State<OTPVerification> {
                     ),
                     appContext: context,
                     length: 6,
-                    controller: otpController,
                     obscureText: false,
                     animationType: AnimationType.fade,
                     keyboardType: TextInputType.number,
@@ -176,12 +184,14 @@ class _OTPVerificationState extends State<OTPVerification> {
 
                         if (response.session != null) {
                           // OTP verified successfully
-                          print(
-                            "OTP Verified, Checking bank connection status",
-                          );
+                          print("OTP Verified, syncing data...");
 
+                          // Sync data from cloud on successful login
+                          await HybridStorageService.syncOnLogin();
+                          
                           // Decide next based on local app setup
                           final hasAppSetup = await _hasLocalAppSetup();
+                          await HybridStorageService.setLastOtpVerification(DateTime.now());
                           if (hasAppSetup) {
                             Navigator.pushReplacement(
                               context,
@@ -273,5 +283,11 @@ class _OTPVerificationState extends State<OTPVerification> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 }

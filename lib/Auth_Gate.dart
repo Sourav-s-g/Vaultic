@@ -1,21 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'SignUpPage.dart'; // Replace with your actual page
-import 'HomePage.dart';   // Replace with your actual page
+import 'SignUpPage.dart';
+import 'HomePage.dart';
+import 'OTPverification.dart';
+import 'VaulticLogin.dart';
+import 'services/hybrid_storage_service.dart';
 
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
   Future<Widget> _getHomeWidget() async {
+    // Prefer cached OTP verification window to skip login entirely for 5 days
+    final last = await HybridStorageService.getLastOtpVerification();
+    final withinWindow = last != null && DateTime.now().difference(last).inDays < 5;
+    if (withinWindow) {
+      return const Homepage();
+    }
+
+    // Otherwise fall back to Supabase session state
     final session = Supabase.instance.client.auth.currentSession;
     final user = session?.user;
-
-    // If not logged in, show signup/login
     if (user == null) {
-      return const SignUpPage(); // Replace with your signup page widget
+      return const SignUpPage();
     }
-    // If logged in, go to home page
-    return const Homepage(); // Replace with your main/home page widget
+
+    // Logged in but OTP window expired -> prompt verification
+    final email = user.email ?? '';
+    if (email.isNotEmpty) {
+      return Vaulticlogin();
+    }
+    return const SignUpPage();
   }
 
   @override
