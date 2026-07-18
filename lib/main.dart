@@ -24,7 +24,7 @@ void main() async {
       anonKey: CredentialService.supabaseAnonKey!,
     );
 
-    runApp(VaulticApp());
+    runApp(const VaulticApp());
   } catch (e) {
     // Handle credential initialization errors
     print('Failed to initialize app: $e');
@@ -45,11 +45,12 @@ class ErrorApp extends StatelessWidget {
     return MaterialApp(
       title: 'Vaultic - Configuration Error',
       theme: ThemeData(
+        brightness: Brightness.dark,
         primarySwatch: Colors.blue,
+        scaffoldBackgroundColor: const Color(0xFF032221),
         fontFamily: GoogleFonts.openSans().fontFamily,
       ),
       home: Scaffold(
-        backgroundColor: const Color(0xFF032221),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24.0),
@@ -101,7 +102,18 @@ class VaulticApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(home: Vaultic(), debugShowCheckedModeBanner: false);
+    return MaterialApp(
+      title: 'Vaultic',
+      theme: ThemeData(
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF032221),
+        textTheme: GoogleFonts.openSansTextTheme(
+          ThemeData.dark().textTheme,
+        ),
+      ),
+      home: const Vaultic(), 
+      debugShowCheckedModeBanner: false,
+    );
   }
 }
 
@@ -163,11 +175,11 @@ class _VaulticState extends State<Vaultic> {
 
       // Calculate minimum time (3 seconds)
       final elapsed = DateTime.now().difference(startTime);
-      final remainingTime = Duration(seconds: 3) - elapsed;
+      final remainingTime = const Duration(seconds: 3) - elapsed;
       
       if (remainingTime.inMilliseconds > 0) {
         // Animate progress bar to completion during remaining time
-        final progressSteps = 20;
+        const progressSteps = 20;
         final stepDuration = remainingTime.inMilliseconds ~/ progressSteps;
         
         for (int i = 0; i < progressSteps; i++) {
@@ -180,12 +192,12 @@ class _VaulticState extends State<Vaultic> {
         }
       }
 
-      setState(() {
-        _isLoading = false;
-      });
-
-      // Navigate to AuthGate
       if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+
+        // Navigate to AuthGate
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const AuthGate()),
@@ -195,7 +207,7 @@ class _VaulticState extends State<Vaultic> {
       print('Error during app initialization: $e');
       // Even if there's an error, ensure minimum time and proceed
       final elapsed = DateTime.now().difference(startTime);
-      final remainingTime = Duration(seconds: 3) - elapsed;
+      final remainingTime = const Duration(seconds: 3) - elapsed;
       
       if (remainingTime.inMilliseconds > 0) {
         setState(() {
@@ -204,7 +216,7 @@ class _VaulticState extends State<Vaultic> {
         });
         
         // Animate progress bar to completion during remaining time
-        final progressSteps = 20;
+        const progressSteps = 20;
         final stepDuration = remainingTime.inMilliseconds ~/ progressSteps;
         
         for (int i = 0; i < progressSteps; i++) {
@@ -287,16 +299,18 @@ class _VaulticState extends State<Vaultic> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF032221),
       body: Container(
+        width: double.infinity,
+        height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Colors.black,
               Color(0xFF032221),
+              Color(0xFF0D635F),
               Color(0xFF032221),
-              Colors.black,
             ],
           ),
         ),
@@ -329,7 +343,7 @@ class _VaulticState extends State<Vaultic> {
             // Progress bar at bottom
             if (_isLoading)
               Positioned(
-                bottom: 100,
+                bottom: MediaQuery.of(context).size.height * 0.1,
                 left: 40,
                 right: 40,
                 child: Column(
@@ -345,7 +359,7 @@ class _VaulticState extends State<Vaultic> {
                       child: Stack(
                         children: [
                           AnimatedContainer(
-                            duration: Duration(milliseconds: 300),
+                            duration: const Duration(milliseconds: 300),
                             width: (MediaQuery.of(context).size.width - 80) * _progress,
                             height: 4,
                             decoration: BoxDecoration(
@@ -356,7 +370,7 @@ class _VaulticState extends State<Vaultic> {
                         ],
                       ),
                     ),
-                    SizedBox(height: 20),
+                    const SizedBox(height: 20),
                     Text(
                       _loadingMessage,
                       style: GoogleFonts.openSans(

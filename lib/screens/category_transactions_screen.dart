@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/transaction_history_model.dart';
 import '../services/hybrid_storage_service.dart';
+
 class CategoryTransactionsScreen extends StatefulWidget {
   final String category;
   final bool allDebit; // if true, show all debit regardless of category
@@ -27,30 +28,37 @@ class _CategoryTransactionsScreenState extends State<CategoryTransactionsScreen>
 
   Future<void> _load() async {
     setState(() { _loading = true; });
-    final raw = await HybridStorageService.getTransactions();
-    final cat = widget.category;
-    final list = raw
-        .map(_transactionFromMap)
-        .where((t) {
-          if (widget.allDebit) return t.type == 'Debit';
-          return t.type == 'Debit' && (t.category == cat);
-        })
-        .toList()
-      ..sort((a,b)=> b.date.compareTo(a.date));
+    try {
+      final raw = await HybridStorageService.getTransactions();
+      final cat = widget.category;
+      final list = raw
+          .map(_transactionFromMap)
+          .where((t) {
+            if (widget.allDebit) return t.type == 'Debit';
+            return t.type == 'Debit' && (t.category == cat);
+          })
+          .toList()
+        ..sort((a,b)=> b.date.compareTo(a.date));
 
-    final budgets = await HybridStorageService.getBudgets();
-    setState(() {
-      _txns = list;
-      _budget = budgets[widget.allDebit ? 'ALL_DEBIT' : widget.category];
-      _loading = false;
-    });
+      final budgets = await HybridStorageService.getBudgets();
+      if (mounted) {
+        setState(() {
+          _txns = list;
+          _budget = budgets[widget.allDebit ? 'ALL_DEBIT' : widget.category];
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() { _loading = false; });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF032221),
       appBar: PreferredSize(
-        preferredSize: Size.fromHeight(kToolbarHeight),
+        preferredSize: const Size.fromHeight(kToolbarHeight),
         child: Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
@@ -78,16 +86,18 @@ class _CategoryTransactionsScreenState extends State<CategoryTransactionsScreen>
         ),
       ),
       body: Container(
+        width: double.infinity,
+        height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFF032221), Colors.black, Color(0xFF032221)],
+            colors: [Color(0xFF032221), Color(0xFF0C4340), Color(0xFF032221)],
           ),
         ),
         child: _loading
             ? const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.green)))
-            : _buildContent(),
+            : SafeArea(child: _buildContent()),
       ),
     );
   }
@@ -103,6 +113,7 @@ class _CategoryTransactionsScreenState extends State<CategoryTransactionsScreen>
     final daysLeft = (daysInMonth - today).clamp(0, daysInMonth);
     final spent = _txns.fold(0.0, (s,t)=> s + t.amount);
     final projection = spent + (avgPerDay * daysLeft);
+    
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -113,6 +124,7 @@ class _CategoryTransactionsScreenState extends State<CategoryTransactionsScreen>
         _buildSearchField(),
         const SizedBox(height: 12),
         if (filtered.isEmpty) _emptyWidget() else ..._buildGroupedByDate(filtered),
+        const SizedBox(height: 40),
       ],
     );
   }
@@ -160,14 +172,14 @@ class _CategoryTransactionsScreenState extends State<CategoryTransactionsScreen>
         hintStyle: const TextStyle(color: Colors.white60),
         prefixIcon: const Icon(Icons.search, color: Colors.white70),
         filled: true,
-        fillColor: Colors.white.withOpacity(0.06),
+        fillColor: Colors.white.withOpacity(0.05),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+          borderSide: const BorderSide(color: Colors.white24),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+          borderSide: const BorderSide(color: Colors.white24),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -182,8 +194,10 @@ class _CategoryTransactionsScreenState extends State<CategoryTransactionsScreen>
     return Row(
       children: [
         Expanded(child: _avgCard(avgPerDay)),
-        const SizedBox(width: 12),
-        if (hasBudget) Expanded(child: _budgetPie(spent, _budget!)),
+        if (hasBudget) ...[
+          const SizedBox(width: 12),
+          Expanded(child: _budgetPie(spent, _budget!)),
+        ],
       ],
     );
   }
@@ -192,7 +206,7 @@ class _CategoryTransactionsScreenState extends State<CategoryTransactionsScreen>
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
+        color: Colors.white.withOpacity(0.05),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white.withOpacity(0.1)),
       ),
@@ -214,31 +228,31 @@ class _CategoryTransactionsScreenState extends State<CategoryTransactionsScreen>
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
+        color: Colors.white.withOpacity(0.05),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white.withOpacity(0.1)),
       ),
       child: Column(
         children: [
           SizedBox(
-            height: 120,
+            height: 100,
             child: PieChart(
               PieChartData(
                 startDegreeOffset: -90,
                 sectionsSpace: 2,
-                centerSpaceRadius: 36,
+                centerSpaceRadius: 30,
                 pieTouchData: PieTouchData(enabled: false),
                 sections: [
                   PieChartSectionData(color: Colors.green, value: used, title: ''),
-                  PieChartSectionData(color: Colors.white24, value: remaining, title: ''),
+                  PieChartSectionData(color: Colors.white12, value: remaining, title: ''),
                 ],
               ),
               swapAnimationDuration: const Duration(milliseconds: 900),
               swapAnimationCurve: Curves.easeOut,
             ),
           ),
-          const SizedBox(height: 20),
-          Text('Budget: ₹${budget.toStringAsFixed(0)}  •  Used: ${(percent*100).toStringAsFixed(0)}%', style: GoogleFonts.nunito(color: Colors.white, fontSize: 12)),
+          const SizedBox(height: 12),
+          Text('Used: ${(percent*100).toStringAsFixed(0)}%', style: GoogleFonts.nunito(color: Colors.white, fontSize: 12)),
         ],
       ),
     );
@@ -257,11 +271,18 @@ class _CategoryTransactionsScreenState extends State<CategoryTransactionsScreen>
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx)=> AlertDialog(
-        title: const Text('Set Budget'),
+        backgroundColor: const Color(0xFF0E1F1F),
+        title: Text('Set Budget', style: GoogleFonts.nunito(color: Colors.white)),
         content: TextField(
           controller: controller,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(hintText: 'Enter budget amount'),
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'Enter budget amount',
+            hintStyle: TextStyle(color: Colors.white38),
+            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.green)),
+          ),
         ),
         actions: [
           TextButton(onPressed: ()=> Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -273,7 +294,9 @@ class _CategoryTransactionsScreenState extends State<CategoryTransactionsScreen>
       final value = double.tryParse(controller.text.trim());
       if (value != null && value > 0) {
         await HybridStorageService.setBudget(widget.allDebit ? 'ALL_DEBIT' : widget.category, value);
-        setState((){ _budget = value; });
+        if (mounted) {
+          setState((){ _budget = value; });
+        }
       }
     }
   }
@@ -305,10 +328,10 @@ class _CategoryTransactionsScreenState extends State<CategoryTransactionsScreen>
     );
     if (res == 'delete') {
       await HybridStorageService.deleteTransactionById(t.transactionId);
-      await _load();
+      _load();
     } else if (res == 'edit') {
       await _showEditDialog(t);
-      await _load();
+      _load();
     }
   }
 
@@ -322,21 +345,27 @@ class _CategoryTransactionsScreenState extends State<CategoryTransactionsScreen>
       context: context,
       builder: (ctx)=> StatefulBuilder(builder: (ctx, setSb){
         return AlertDialog(
-          title: const Text('Edit Transaction'),
+          backgroundColor: const Color(0xFF0E1F1F),
+          title: Text('Edit Transaction', style: GoogleFonts.nunito(color: Colors.white)),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: amountC, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Amount')),
-                TextField(controller: descC, decoration: const InputDecoration(labelText: 'Description')),
-                const SizedBox(height: 8),
-                DropdownButton<String>(value: type, items: const [DropdownMenuItem(value: 'Credit', child: Text('Credit')), DropdownMenuItem(value: 'Debit', child: Text('Debit'))], onChanged: (v){ setSb(()=> type = v ?? 'Debit'); }),
-                if (type == 'Debit') TextField(controller: TextEditingController(text: category), onChanged: (v)=> category=v, decoration: const InputDecoration(labelText: 'Category')),
-                const SizedBox(height: 8),
+                TextField(controller: amountC, style: const TextStyle(color: Colors.white), keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Amount', labelStyle: TextStyle(color: Colors.white70))),
+                TextField(controller: descC, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'Description', labelStyle: TextStyle(color: Colors.white70))),
+                const SizedBox(height: 16),
+                DropdownButton<String>(
+                  value: type, 
+                  dropdownColor: const Color(0xFF0E1F1F),
+                  style: const TextStyle(color: Colors.white),
+                  items: const [DropdownMenuItem(value: 'Credit', child: Text('Credit')), DropdownMenuItem(value: 'Debit', child: Text('Debit'))], 
+                  onChanged: (v){ setSb(()=> type = v ?? 'Debit'); }
+                ),
+                if (type == 'Debit') TextField(controller: TextEditingController(text: category), style: const TextStyle(color: Colors.white), onChanged: (v)=> category=v, decoration: const InputDecoration(labelText: 'Category', labelStyle: TextStyle(color: Colors.white70))),
+                const SizedBox(height: 16),
                 Row(children: [
-                  Text('Date: ${_formatDateTime(date)}'),
-                  const Spacer(),
-                  TextButton(onPressed: () async { final d = await showDatePicker(context: ctx, firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 365)), initialDate: date); if (d!=null) setSb(()=> date=d); }, child: const Text('Pick date')),
+                  Expanded(child: Text('Date: ${_formatDateTime(date)}', style: const TextStyle(color: Colors.white70, fontSize: 12))),
+                  TextButton(onPressed: () async { final d = await showDatePicker(context: ctx, firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 365)), initialDate: date); if (d!=null) setSb(()=> date=d); }, child: const Text('Pick date', style: TextStyle(color: Colors.green))),
                 ]),
               ],
             ),
@@ -380,7 +409,7 @@ class _CategoryTransactionsScreenState extends State<CategoryTransactionsScreen>
   Widget _predictionCard(double spent, double projection) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white.withOpacity(0.06), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white24)),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
       child: Row(
         children: [
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -414,11 +443,11 @@ class _CategoryTransactionsScreenState extends State<CategoryTransactionsScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.receipt_long, size: 64, color: Colors.grey[400]),
+          const Icon(Icons.receipt_long, size: 64, color: Colors.white24),
           const SizedBox(height: 16),
           Text('No transactions', style: GoogleFonts.nunito(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
-          Text('Transactions will appear here', style: GoogleFonts.nunito(color: Colors.white70, fontSize: 14)),
+          Text('Transactions will appear here', style: GoogleFonts.nunito(color: Colors.white38, fontSize: 14)),
         ],
       ),
     );
@@ -437,7 +466,7 @@ class _CategoryTransactionsScreenState extends State<CategoryTransactionsScreen>
       final dt = parseKey(k);
       widgets.add(Padding(
         padding: const EdgeInsets.symmetric(vertical: 8.0),
-        child: Text(_formatDateTime(dt), style: GoogleFonts.nunito(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w700)),
+        child: Text(_formatDate(dt), style: GoogleFonts.nunito(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w700)),
       ));
       widgets.addAll(grouped[k]!.map(_txTile));
     }
@@ -461,5 +490,13 @@ class _CategoryTransactionsScreenState extends State<CategoryTransactionsScreen>
     final t = '${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
     return '$d • $t';
   }
-}
 
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final diff = now.difference(date).inDays;
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Yesterday';
+    if (diff < 7) return '$diff days ago';
+    return '${date.day}/${date.month}/${date.year}';
+  }
+}

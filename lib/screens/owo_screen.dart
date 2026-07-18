@@ -4,7 +4,7 @@ import '../models/owo_entry.dart';
 import '../services/hybrid_storage_service.dart';
 
 class OwesOwnsScreen extends StatefulWidget {
-  final bool contentOnly; // when true, renders only the body content (no Scaffold/app bar)
+  final bool contentOnly; 
   const OwesOwnsScreen({super.key, this.contentOnly = false});
 
   @override
@@ -33,7 +33,24 @@ class _OwesOwnsScreenState extends State<OwesOwnsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final content = Container(
+    final bodyContent = ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _buildHeaderSummary(),
+        const SizedBox(height: 12),
+        _buildSearchAndFilter(),
+        const SizedBox(height: 12),
+        if (_filtered().isEmpty)
+          _emptyState()
+        else
+          ..._filtered().map(_tile),
+        const SizedBox(height: 40),
+      ],
+    );
+
+    final fullContent = Container(
+      width: double.infinity,
+      height: double.infinity,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -41,27 +58,19 @@ class _OwesOwnsScreenState extends State<OwesOwnsScreen> {
           colors: [Color(0xFF032221), Colors.black, Color(0xFF032221)],
         ),
       ),
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _buildHeaderSummary(),
-          const SizedBox(height: 12),
-          _buildSearchAndFilter(),
-          const SizedBox(height: 12),
-          if (_filtered().isEmpty)
-            _emptyState()
-          else
-            ..._filtered().map(_tile),
-        ],
+      child: SafeArea(
+        top: !widget.contentOnly,
+        bottom: true,
+        child: bodyContent,
       ),
     );
 
-    if (widget.contentOnly) return content;
+    if (widget.contentOnly) return Container(color: Colors.transparent, child: bodyContent);
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: const Color(0xFF032221),
       appBar: PreferredSize(
-        preferredSize: Size.fromHeight(kToolbarHeight),
+        preferredSize: const Size.fromHeight(kToolbarHeight),
         child: Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
@@ -76,12 +85,12 @@ class _OwesOwnsScreenState extends State<OwesOwnsScreen> {
             elevation: 0,
             iconTheme: const IconThemeData(color: Colors.white),
             actions: [
-              IconButton(onPressed: _showAddDialog, icon: Icon(Icons.add, color: Colors.white)),
+              IconButton(onPressed: _showAddDialog, icon: const Icon(Icons.add, color: Colors.white)),
             ],
           ),
         ),
       ),
-      body: content,
+      body: fullContent,
     );
   }
 
@@ -98,7 +107,11 @@ class _OwesOwnsScreenState extends State<OwesOwnsScreen> {
     final youOwe = _entries.where((e)=> e.direction == 'owe' && !e.settled).fold(0.0, (s,e)=> s + e.amount);
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white.withOpacity(0.06), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white24)),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05), 
+        borderRadius: BorderRadius.circular(12), 
+        border: Border.all(color: Colors.white.withOpacity(0.1))
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
@@ -131,9 +144,9 @@ class _OwesOwnsScreenState extends State<OwesOwnsScreen> {
             hintStyle: const TextStyle(color: Colors.white60),
             prefixIcon: const Icon(Icons.search, color: Colors.white70),
             filled: true,
-            fillColor: Colors.white.withOpacity(0.06),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.white24)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.white24)),
+            fillColor: Colors.white.withOpacity(0.05),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white24)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white24)),
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.green)),
           ),
         ),
@@ -141,21 +154,26 @@ class _OwesOwnsScreenState extends State<OwesOwnsScreen> {
         Row(
           children: [
             FilterChip(
-              label: Text('Show Settled', style: GoogleFonts.nunito(color: _showSettled ? Colors.black : Colors.black)),
+              label: Text('Show Settled', style: GoogleFonts.nunito(color: Colors.white)),
               selected: _showSettled,
               onSelected: (v)=> setState(()=> _showSettled = v),
               backgroundColor: Colors.transparent,
-              selectedColor: Colors.green,
-              checkmarkColor: Colors.black,
-              shape: StadiumBorder(side: BorderSide(color: Colors.white54)),
+              selectedColor: Colors.green.withOpacity(0.5),
+              checkmarkColor: Colors.white,
+              shape: const StadiumBorder(side: BorderSide(color: Colors.white24)),
               visualDensity: VisualDensity.compact,
             ),
             const Spacer(),
             ElevatedButton.icon(
               onPressed: _showAddDialog,
-              icon: const Icon(Icons.add),
+              icon: const Icon(Icons.add, size: 18),
               label: const Text('Add Entry'),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green, 
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+              ),
             ),
           ],
         ),
@@ -167,17 +185,23 @@ class _OwesOwnsScreenState extends State<OwesOwnsScreen> {
     final color = e.direction == 'owe' ? Colors.orangeAccent : Colors.lightGreen;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(color: Colors.white.withOpacity(0.06), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white24)),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05), 
+        borderRadius: BorderRadius.circular(12), 
+        border: Border.all(color: Colors.white.withOpacity(0.1))
+      ),
       child: ListTile(
         title: Text('${e.counterparty} • ₹${e.amount.toStringAsFixed(0)}', style: GoogleFonts.nunito(color: color, fontWeight: FontWeight.w700)),
         subtitle: Text(_subtitle(e), style: GoogleFonts.nunito(color: Colors.white70, fontSize: 12)),
         trailing: PopupMenuButton<String>(
+          icon: const Icon(Icons.more_vert, color: Colors.white70),
+          color: const Color(0xFF0E1F1F),
           onSelected: (v)=> _handleAction(v, e),
           itemBuilder: (ctx)=> [
-            PopupMenuItem(value: 'toggle', child: Text(e.settled ? 'Mark as Open' : 'Mark as Settled')),
-            PopupMenuItem(value: 'edit', child: Text('Edit')),
-            PopupMenuItem(value: 'pay', child: Text(e.direction=='owned' ? 'Record received' : 'Record payment')),
-            PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
+            PopupMenuItem(value: 'toggle', child: Text(e.settled ? 'Mark as Open' : 'Mark as Settled', style: const TextStyle(color: Colors.white))),
+            const PopupMenuItem(value: 'edit', child: Text('Edit', style: TextStyle(color: Colors.white))),
+            PopupMenuItem(value: 'pay', child: Text(e.direction=='owned' ? 'Record received' : 'Record payment', style: const TextStyle(color: Colors.white))),
+            const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
           ],
         ),
       ),
@@ -206,7 +230,6 @@ class _OwesOwnsScreenState extends State<OwesOwnsScreen> {
       );
       await OwesOwnsStorage.updateOwoEntry(updated.toMap());
       if (!e.settled && updated.settled) {
-        // Create a corresponding transaction entry when settling
         final txn = {
           'transactionId': DateTime.now().microsecondsSinceEpoch.toString(),
           'description': 'Settled: ${e.counterparty}',
@@ -223,14 +246,32 @@ class _OwesOwnsScreenState extends State<OwesOwnsScreen> {
       _showAddDialog(existing: e);
     } else if (action == 'pay') {
       final c = TextEditingController();
-      final ok = await showDialog<bool>(context: context, builder: (ctx)=> AlertDialog(title: Text('Enter amount'), content: TextField(controller: c, keyboardType: const TextInputType.numberWithOptions(decimal: true)), actions: [TextButton(onPressed: ()=> Navigator.pop(ctx, false), child: const Text('Cancel')), TextButton(onPressed: ()=> Navigator.pop(ctx, true), child: const Text('Save'))]));
+      final ok = await showDialog<bool>(
+        context: context, 
+        builder: (ctx)=> AlertDialog(
+          backgroundColor: const Color(0xFF0E1F1F),
+          title: Text('Enter amount', style: GoogleFonts.nunito(color: Colors.white)), 
+          content: TextField(
+            controller: c, 
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+              focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.green)),
+            ),
+          ), 
+          actions: [
+            TextButton(onPressed: ()=> Navigator.pop(ctx, false), child: const Text('Cancel')), 
+            TextButton(onPressed: ()=> Navigator.pop(ctx, true), child: const Text('Save'))
+          ]
+        )
+      );
       if (ok == true) {
         final amt = double.tryParse(c.text.trim()) ?? 0.0;
         if (amt > 0) {
           final newAmt = (e.amount - amt).clamp(0, double.infinity).toDouble();
           final updated = OweEntry(id: e.id, counterparty: e.counterparty, direction: e.direction, amount: newAmt, note: e.note, createdAt: e.createdAt, dueDate: e.dueDate, settled: newAmt == 0.0 ? true : e.settled);
           await OwesOwnsStorage.updateOwoEntry(updated.toMap());
-          // For partial receipts/payments, optionally create a transaction
           final txn = {
             'transactionId': DateTime.now().microsecondsSinceEpoch.toString(),
             'description': (e.direction=='owned' ? 'Received from ' : 'Paid to ') + e.counterparty,
@@ -245,7 +286,17 @@ class _OwesOwnsScreenState extends State<OwesOwnsScreen> {
         }
       }
     } else if (action == 'delete') {
-      final ok = await showDialog<bool>(context: context, builder: (ctx)=> AlertDialog(title: Text('Delete?'), actions: [TextButton(onPressed: ()=> Navigator.pop(ctx, false), child: Text('Cancel')), TextButton(onPressed: ()=> Navigator.pop(ctx, true), child: Text('Delete', style: TextStyle(color: Colors.red)))]));
+      final ok = await showDialog<bool>(
+        context: context, 
+        builder: (ctx)=> AlertDialog(
+          backgroundColor: const Color(0xFF0E1F1F),
+          title: Text('Delete?', style: GoogleFonts.nunito(color: Colors.white)), 
+          actions: [
+            TextButton(onPressed: ()=> Navigator.pop(ctx, false), child: const Text('Cancel')), 
+            TextButton(onPressed: ()=> Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: Colors.red)))
+          ]
+        )
+      );
       if (ok == true) {
         await OwesOwnsStorage.deleteOwoEntry(e.id);
         await _load();
@@ -259,11 +310,11 @@ class _OwesOwnsScreenState extends State<OwesOwnsScreen> {
       alignment: Alignment.center,
       child: Column(
         children: [
-          Icon(Icons.receipt_long, color: Colors.white54, size: 48),
+          const Icon(Icons.receipt_long, color: Colors.white24, size: 48),
           const SizedBox(height: 8),
           Text('No entries yet', style: GoogleFonts.nunito(color: Colors.white70, fontSize: 14)),
           const SizedBox(height: 4),
-          Text('Tap "Add Entry" above to create one', style: GoogleFonts.nunito(color: Colors.white54, fontSize: 12)),
+          Text('Tap "Add Entry" above to create one', style: GoogleFonts.nunito(color: Colors.white24, fontSize: 12)),
         ],
       ),
     );
@@ -279,28 +330,37 @@ class _OwesOwnsScreenState extends State<OwesOwnsScreen> {
       context: context,
       builder: (ctx)=> StatefulBuilder(builder: (ctx, setSb){
         return AlertDialog(
-          title: Text(existing==null? 'New Entry' : 'Edit Entry'),
+          backgroundColor: const Color(0xFF0E1F1F),
+          title: Text(existing==null? 'New Entry' : 'Edit Entry', style: GoogleFonts.nunito(color: Colors.white)),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: nameC, decoration: InputDecoration(labelText: 'Person')),
-                TextField(controller: amountC, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: 'Amount')),
-                TextField(controller: noteC, decoration: InputDecoration(labelText: 'Note (optional)')),
-                const SizedBox(height: 8),
-                DropdownButton<String>(value: dir, items: const [DropdownMenuItem(value: 'owe', child: Text('You owe')), DropdownMenuItem(value: 'owned', child: Text('Owed to you'))], onChanged: (v)=> setSb(()=> dir = v ?? 'owe')),
+                TextField(controller: nameC, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'Person', labelStyle: TextStyle(color: Colors.white70))),
+                TextField(controller: amountC, keyboardType: const TextInputType.numberWithOptions(decimal: true), style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'Amount', labelStyle: TextStyle(color: Colors.white70))),
+                TextField(controller: noteC, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'Note (optional)', labelStyle: TextStyle(color: Colors.white70))),
+                const SizedBox(height: 16),
+                DropdownButton<String>(
+                  value: dir, 
+                  dropdownColor: const Color(0xFF0E1F1F),
+                  style: const TextStyle(color: Colors.white),
+                  items: const [
+                    DropdownMenuItem(value: 'owe', child: Text('You owe')), 
+                    DropdownMenuItem(value: 'owned', child: Text('Owed to you'))
+                  ], 
+                  onChanged: (v)=> setSb(()=> dir = v ?? 'owe')
+                ),
                 const SizedBox(height: 8),
                 Row(children: [
-                  Text(due==null? 'No due date' : 'Due: ${due!.day}/${due!.month}/${due!.year}'),
-                  const Spacer(),
-                  TextButton(onPressed: () async { final d = await showDatePicker(context: ctx, firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 365*5)), initialDate: due ?? DateTime.now()); if (d!=null) setSb(()=> due = d); }, child: const Text('Pick due')),
+                  Expanded(child: Text(due==null? 'No due date' : 'Due: ${due!.day}/${due!.month}/${due!.year}', style: const TextStyle(color: Colors.white70, fontSize: 12))),
+                  TextButton(onPressed: () async { final d = await showDatePicker(context: ctx, firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 365*5)), initialDate: due ?? DateTime.now()); if (d!=null) setSb(()=> due = d); }, child: const Text('Pick due', style: TextStyle(color: Colors.green))),
                 ]),
               ],
             ),
           ),
           actions: [
             TextButton(onPressed: ()=> Navigator.pop(ctx, false), child: const Text('Cancel')),
-            TextButton(onPressed: ()=> Navigator.pop(ctx, true), child: const Text('Save')),
+            TextButton(onPressed: ()=> Navigator.pop(ctx, true), child: const Text('Save'))
           ],
         );
       }),
@@ -309,7 +369,6 @@ class _OwesOwnsScreenState extends State<OwesOwnsScreen> {
       final amt = double.tryParse(amountC.text.trim()) ?? 0.0;
       final name = nameC.text.trim();
       if (existing == null) {
-        // Merge by name and direction if an open entry exists
         final list = await OwesOwnsStorage.getOwoEntries();
         final idx = list.indexWhere((m)=> (m['counterparty'] ?? '').toString().toLowerCase() == name.toLowerCase() && (m['direction'] ?? 'owe').toString() == dir && (m['settled'] ?? false) == false);
         if (idx != -1) {
@@ -328,5 +387,3 @@ class _OwesOwnsScreenState extends State<OwesOwnsScreen> {
     }
   }
 }
-
-

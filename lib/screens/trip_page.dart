@@ -46,20 +46,24 @@ class _TripPageState extends State<TripPage> {
       final endIndex = (startIndex + _pageSize).clamp(0, allTxns.length);
       final pageTxns = allTxns.sublist(startIndex, endIndex);
 
-      setState(() {
-        if (loadMore) {
-          _transactions.addAll(pageTxns);
-        } else {
-          _transactions = pageTxns;
-        }
-        _hasMoreData = endIndex < allTxns.length;
-        _currentPage++;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          if (loadMore) {
+            _transactions.addAll(pageTxns);
+          } else {
+            _transactions = pageTxns;
+          }
+          _hasMoreData = endIndex < allTxns.length;
+          _currentPage++;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -84,15 +88,15 @@ class _TripPageState extends State<TripPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFF0A0A0A),
+      backgroundColor: const Color(0xFF032221),
       body: Container(
-        decoration: BoxDecoration(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF032221), Colors.black, Color(0xFF032221)
-            ],
+            colors: [Color(0xFF032221), Color(0xFF0C4340), Color(0xFF032221)],
           ),
         ),
         child: Column(
@@ -101,7 +105,7 @@ class _TripPageState extends State<TripPage> {
               backgroundColor: Colors.transparent,
               elevation: 0,
               leading: IconButton(
-                icon: Icon(Icons.arrow_back, color: Colors.white),
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
                 onPressed: () => Navigator.pop(context),
               ),
               title: Text(
@@ -114,17 +118,17 @@ class _TripPageState extends State<TripPage> {
               ),
               actions: [
                 IconButton(
-                  icon: Icon(Icons.more_vert, color: Colors.white),
+                  icon: const Icon(Icons.more_vert, color: Colors.white),
                   onPressed: () => _showTripOptions(),
                 ),
               ],
             ),
-            // Categories Section
             _buildCategoriesSection(),
-            
-            // Transactions Section
             Expanded(
-              child: _buildTransactionsSection(),
+              child: SafeArea(
+                top: false,
+                child: _buildTransactionsSection(),
+              ),
             ),
           ],
         ),
@@ -132,19 +136,18 @@ class _TripPageState extends State<TripPage> {
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddTransactionDialog,
         backgroundColor: Colors.green,
-        child: Icon(Icons.add, color: Colors.white),
+        child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }
 
   Widget _buildCategoriesSection() {
-    return Container(
-      height: 120,
+    return SizedBox(
+      height: 140,
       child: ListView(
         scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         children: [
-          // Total Spent Card
           _buildCategoryCard(
             title: 'Total Spent',
             amount: '₹${_getTotalSpent().toStringAsFixed(0)}',
@@ -154,8 +157,6 @@ class _TripPageState extends State<TripPage> {
             budget: widget.trip.budget,
             spent: _getTotalSpent(),
           ),
-          
-          // Category Cards
           ...widget.trip.categories.map((category) {
             final amount = _getCategoryTotal(category);
             final categoryBudget = widget.trip.categoryBudgets?[category];
@@ -191,8 +192,8 @@ class _TripPageState extends State<TripPage> {
       onTap: onTap,
       child: Container(
         width: 160,
-        margin: EdgeInsets.only(right: 12),
-        padding: EdgeInsets.all(16),
+        margin: const EdgeInsets.only(right: 12),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.05),
           borderRadius: BorderRadius.circular(12),
@@ -203,11 +204,12 @@ class _TripPageState extends State<TripPage> {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Row(
               children: [
                 Icon(icon, color: color, size: 20),
-                SizedBox(width: 8),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     title,
@@ -221,7 +223,7 @@ class _TripPageState extends State<TripPage> {
                 ),
               ],
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Text(
               amount,
               style: GoogleFonts.nunito(
@@ -231,7 +233,7 @@ class _TripPageState extends State<TripPage> {
               ),
             ),
             if (hasBudget) ...[
-              SizedBox(height: 4),
+              const SizedBox(height: 4),
               Text(
                 '₹${budget.toStringAsFixed(0)} budget',
                 style: GoogleFonts.nunito(
@@ -239,9 +241,10 @@ class _TripPageState extends State<TripPage> {
                   fontSize: 10,
                 ),
               ),
-              SizedBox(height: 4),
+              const SizedBox(height: 4),
               Container(
                 height: 4,
+                width: double.infinity,
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(2),
@@ -266,7 +269,7 @@ class _TripPageState extends State<TripPage> {
 
   Widget _buildTransactionsSection() {
     return Container(
-      margin: EdgeInsets.all(20),
+      margin: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -278,10 +281,10 @@ class _TripPageState extends State<TripPage> {
               fontWeight: FontWeight.bold,
             ),
           ),
-          SizedBox(height: 12),
+          const SizedBox(height: 12),
           Expanded(
             child: _isLoading && _transactions.isEmpty
-                ? Center(
+                ? const Center(
                     child: CircularProgressIndicator(
                       valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
                     ),
@@ -297,43 +300,37 @@ class _TripPageState extends State<TripPage> {
 
   Widget _buildTransactionList() {
     return ListView.builder(
-      itemCount: _transactions.length + (_hasMoreData ? 1 : 0) + (_isLoading && _transactions.isNotEmpty ? 1 : 0),
+      padding: const EdgeInsets.only(bottom: 80),
+      itemCount: _transactions.length + (_hasMoreData ? 1 : 0),
       itemBuilder: (context, index) {
         if (index < _transactions.length) {
           return _buildTransactionItem(_transactions[index]);
-        } else if (index == _transactions.length && _hasMoreData && !_isLoading) {
+        } else if (index == _transactions.length && _hasMoreData) {
           return Container(
-            margin: EdgeInsets.symmetric(vertical: 16),
+            margin: const EdgeInsets.symmetric(vertical: 16),
             child: Center(
-              child: ElevatedButton(
-                onPressed: _loadMoreTransactions,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                ),
-                child: Text('Load More'),
-              ),
-            ),
-          );
-        } else if (index == _transactions.length && _isLoading && _transactions.isNotEmpty) {
-          return Container(
-            margin: EdgeInsets.symmetric(vertical: 16),
-            child: Center(
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
-              ),
+              child: _isLoading 
+                ? const CircularProgressIndicator(color: Colors.green)
+                : ElevatedButton(
+                    onPressed: _loadMoreTransactions,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Load More'),
+                  ),
             ),
           );
         }
-        return SizedBox.shrink();
+        return const SizedBox.shrink();
       },
     );
   }
 
   Widget _buildTransactionItem(Transaction transaction) {
     return Container(
-      margin: EdgeInsets.only(bottom: 12),
-      padding: EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.05),
         borderRadius: BorderRadius.circular(12),
@@ -354,7 +351,7 @@ class _TripPageState extends State<TripPage> {
               size: 20,
             ),
           ),
-          SizedBox(width: 12),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -367,7 +364,7 @@ class _TripPageState extends State<TripPage> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
                   '${transaction.category} • ${_formatDate(transaction.date)}',
                   style: GoogleFonts.nunito(
@@ -387,7 +384,8 @@ class _TripPageState extends State<TripPage> {
             ),
           ),
           PopupMenuButton<String>(
-            icon: Icon(Icons.more_vert, color: Colors.white70),
+            icon: const Icon(Icons.more_vert, color: Colors.white70),
+            color: const Color(0xFF0E1F1F),
             onSelected: (value) async {
               if (value == 'edit') {
                 _showEditTransactionDialog(transaction);
@@ -396,23 +394,23 @@ class _TripPageState extends State<TripPage> {
               }
             },
             itemBuilder: (context) => [
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: 'edit',
                 child: Row(
                   children: [
                     Icon(Icons.edit, color: Colors.white, size: 16),
                     SizedBox(width: 8),
-                    Text('Edit', style: GoogleFonts.nunito(color: Colors.white)),
+                    Text('Edit', style: TextStyle(color: Colors.white)),
                   ],
                 ),
               ),
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: 'delete',
                 child: Row(
                   children: [
                     Icon(Icons.delete, color: Colors.red, size: 16),
                     SizedBox(width: 8),
-                    Text('Delete', style: GoogleFonts.nunito(color: Colors.red)),
+                    Text('Delete', style: TextStyle(color: Colors.red)),
                   ],
                 ),
               ),
@@ -433,7 +431,7 @@ class _TripPageState extends State<TripPage> {
             color: Colors.white.withOpacity(0.3),
             size: 64,
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           Text(
             'No transactions yet',
             style: GoogleFonts.nunito(
@@ -441,7 +439,7 @@ class _TripPageState extends State<TripPage> {
               fontSize: 16,
             ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             'Add your first transaction for this trip',
             style: GoogleFonts.nunito(
@@ -465,7 +463,7 @@ class _TripPageState extends State<TripPage> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          backgroundColor: Color(0xFF1A1A1A),
+          backgroundColor: const Color(0xFF1A1A1A),
           title: Text(
             'Add Transaction',
             style: GoogleFonts.nunito(
@@ -474,57 +472,45 @@ class _TripPageState extends State<TripPage> {
               fontWeight: FontWeight.bold,
             ),
           ),
-          content: Container(
-            width: double.maxFinite,
+          content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Description
                 TextField(
                   controller: descriptionController,
                   style: GoogleFonts.nunito(color: Colors.white),
                   decoration: InputDecoration(
                     labelText: 'Description',
-                    labelStyle: TextStyle(color: Colors.white70),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                    labelStyle: const TextStyle(color: Colors.white70),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+                      borderSide: const BorderSide(color: Colors.white24),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.green),
+                      borderSide: const BorderSide(color: Colors.green),
                     ),
                   ),
                 ),
-                SizedBox(height: 16),
-                
-                // Amount
+                const SizedBox(height: 16),
                 TextField(
                   controller: amountController,
                   style: GoogleFonts.nunito(color: Colors.white),
-                  keyboardType: TextInputType.number,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: InputDecoration(
                     labelText: 'Amount',
-                    labelStyle: TextStyle(color: Colors.white70),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                    labelStyle: const TextStyle(color: Colors.white70),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+                      borderSide: const BorderSide(color: Colors.white24),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.green),
+                      borderSide: const BorderSide(color: Colors.green),
                     ),
                   ),
                 ),
-                SizedBox(height: 16),
-                
-                // Date Picker
+                const SizedBox(height: 16),
                 GestureDetector(
                   onTap: () async {
                     final date = await showDatePicker(
@@ -535,7 +521,7 @@ class _TripPageState extends State<TripPage> {
                       builder: (context, child) {
                         return Theme(
                           data: Theme.of(context).copyWith(
-                            colorScheme: ColorScheme.dark(
+                            colorScheme: const ColorScheme.dark(
                               primary: Colors.green,
                               onPrimary: Colors.white,
                               surface: Color(0xFF1A1A1A),
@@ -553,48 +539,40 @@ class _TripPageState extends State<TripPage> {
                     }
                   },
                   child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.white.withOpacity(0.3)),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.calendar_today, color: Colors.white70, size: 20),
-                        SizedBox(width: 12),
+                        const Icon(Icons.calendar_today, color: Colors.white70, size: 20),
+                        const SizedBox(width: 12),
                         Text(
                           '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
-                          style: GoogleFonts.nunito(
-                            color: Colors.white,
-                            fontSize: 16,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
                         ),
                       ],
                     ),
                   ),
                 ),
-                SizedBox(height: 16),
-                
-                // Category Dropdown
+                const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   value: selectedCategory,
-                  style: GoogleFonts.nunito(color: Colors.white),
+                  dropdownColor: const Color(0xFF1A1A1A),
+                  style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     labelText: 'Category',
-                    labelStyle: TextStyle(color: Colors.white70),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                    labelStyle: const TextStyle(color: Colors.white70),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+                      borderSide: const BorderSide(color: Colors.white24),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.green),
+                      borderSide: const BorderSide(color: Colors.green),
                     ),
                   ),
-                  dropdownColor: Color(0xFF1A1A1A),
                   items: widget.trip.categories.map((category) {
                     return DropdownMenuItem(
                       value: category,
@@ -607,28 +585,23 @@ class _TripPageState extends State<TripPage> {
                     });
                   },
                 ),
-                SizedBox(height: 16),
-                
-                // Type Dropdown
+                const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   value: selectedType,
-                  style: GoogleFonts.nunito(color: Colors.white),
+                  dropdownColor: const Color(0xFF1A1A1A),
+                  style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     labelText: 'Type',
-                    labelStyle: TextStyle(color: Colors.white70),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                    labelStyle: const TextStyle(color: Colors.white70),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+                      borderSide: const BorderSide(color: Colors.white24),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.green),
+                      borderSide: const BorderSide(color: Colors.green),
                     ),
                   ),
-                  dropdownColor: Color(0xFF1A1A1A),
                   items: ['Debit', 'Credit'].map((type) {
                     return DropdownMenuItem(
                       value: type,
@@ -647,42 +620,24 @@ class _TripPageState extends State<TripPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text(
-                'Cancel',
-                style: GoogleFonts.nunito(
-                  color: Colors.white70,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
             ),
             TextButton(
               onPressed: () async {
-                if (descriptionController.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Please enter a description')),
-                  );
+                final amountText = amountController.text.trim();
+                final desc = descriptionController.text.trim();
+                if (desc.isEmpty || amountText.isEmpty) {
                   return;
                 }
                 
-                if (amountController.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Please enter an amount')),
-                  );
-                  return;
-                }
-                
-                final amount = double.tryParse(amountController.text);
+                final amount = double.tryParse(amountText);
                 if (amount == null || amount <= 0) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Please enter a valid amount')),
-                  );
                   return;
                 }
                 
-                // Create transaction
                 final transaction = {
                   'transactionId': const Uuid().v4(),
-                  'description': descriptionController.text.trim(),
+                  'description': desc,
                   'amount': amount,
                   'type': selectedType,
                   'date': selectedDate.toIso8601String(),
@@ -693,16 +648,11 @@ class _TripPageState extends State<TripPage> {
                 };
                 
                 await TripStorageService.addTripTransaction(widget.trip.tripId, transaction);
+                if (!mounted) return;
                 Navigator.of(context).pop();
                 await _loadTransactions();
               },
-              child: Text(
-                'Add',
-                style: GoogleFonts.nunito(
-                  color: Colors.green,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              child: const Text('Add', style: TextStyle(color: Colors.green)),
             ),
           ],
         ),
@@ -721,7 +671,7 @@ class _TripPageState extends State<TripPage> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          backgroundColor: Color(0xFF1A1A1A),
+          backgroundColor: const Color(0xFF1A1A1A),
           title: Text(
             'Edit Transaction',
             style: GoogleFonts.nunito(
@@ -730,57 +680,45 @@ class _TripPageState extends State<TripPage> {
               fontWeight: FontWeight.bold,
             ),
           ),
-          content: Container(
-            width: double.maxFinite,
+          content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Description
                 TextField(
                   controller: descriptionController,
                   style: GoogleFonts.nunito(color: Colors.white),
                   decoration: InputDecoration(
                     labelText: 'Description',
-                    labelStyle: TextStyle(color: Colors.white70),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                    labelStyle: const TextStyle(color: Colors.white70),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+                      borderSide: const BorderSide(color: Colors.white24),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.green),
+                      borderSide: const BorderSide(color: Colors.green),
                     ),
                   ),
                 ),
-                SizedBox(height: 16),
-                
-                // Amount
+                const SizedBox(height: 16),
                 TextField(
                   controller: amountController,
                   style: GoogleFonts.nunito(color: Colors.white),
-                  keyboardType: TextInputType.number,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: InputDecoration(
                     labelText: 'Amount',
-                    labelStyle: TextStyle(color: Colors.white70),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                    labelStyle: const TextStyle(color: Colors.white70),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+                      borderSide: const BorderSide(color: Colors.white24),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.green),
+                      borderSide: const BorderSide(color: Colors.green),
                     ),
                   ),
                 ),
-                SizedBox(height: 16),
-                
-                // Date Picker
+                const SizedBox(height: 16),
                 GestureDetector(
                   onTap: () async {
                     final date = await showDatePicker(
@@ -791,7 +729,7 @@ class _TripPageState extends State<TripPage> {
                       builder: (context, child) {
                         return Theme(
                           data: Theme.of(context).copyWith(
-                            colorScheme: ColorScheme.dark(
+                            colorScheme: const ColorScheme.dark(
                               primary: Colors.green,
                               onPrimary: Colors.white,
                               surface: Color(0xFF1A1A1A),
@@ -809,48 +747,40 @@ class _TripPageState extends State<TripPage> {
                     }
                   },
                   child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.white.withOpacity(0.3)),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.calendar_today, color: Colors.white70, size: 20),
-                        SizedBox(width: 12),
+                        const Icon(Icons.calendar_today, color: Colors.white70, size: 20),
+                        const SizedBox(width: 12),
                         Text(
                           '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
-                          style: GoogleFonts.nunito(
-                            color: Colors.white,
-                            fontSize: 16,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
                         ),
                       ],
                     ),
                   ),
                 ),
-                SizedBox(height: 16),
-                
-                // Category Dropdown
+                const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   value: selectedCategory,
-                  style: GoogleFonts.nunito(color: Colors.white),
+                  dropdownColor: const Color(0xFF1A1A1A),
+                  style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     labelText: 'Category',
-                    labelStyle: TextStyle(color: Colors.white70),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                    labelStyle: const TextStyle(color: Colors.white70),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+                      borderSide: const BorderSide(color: Colors.white24),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.green),
+                      borderSide: const BorderSide(color: Colors.green),
                     ),
                   ),
-                  dropdownColor: Color(0xFF1A1A1A),
                   items: widget.trip.categories.map((category) {
                     return DropdownMenuItem(
                       value: category,
@@ -863,28 +793,23 @@ class _TripPageState extends State<TripPage> {
                     });
                   },
                 ),
-                SizedBox(height: 16),
-                
-                // Type Dropdown
+                const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   value: selectedType,
-                  style: GoogleFonts.nunito(color: Colors.white),
+                  dropdownColor: const Color(0xFF1A1A1A),
+                  style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     labelText: 'Type',
-                    labelStyle: TextStyle(color: Colors.white70),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                    labelStyle: const TextStyle(color: Colors.white70),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+                      borderSide: const BorderSide(color: Colors.white24),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.green),
+                      borderSide: const BorderSide(color: Colors.green),
                     ),
                   ),
-                  dropdownColor: Color(0xFF1A1A1A),
                   items: ['Debit', 'Credit'].map((type) {
                     return DropdownMenuItem(
                       value: type,
@@ -903,42 +828,20 @@ class _TripPageState extends State<TripPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text(
-                'Cancel',
-                style: GoogleFonts.nunito(
-                  color: Colors.white70,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
             ),
             TextButton(
               onPressed: () async {
-                if (descriptionController.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Please enter a description')),
-                  );
-                  return;
-                }
+                final amountText = amountController.text.trim();
+                final desc = descriptionController.text.trim();
+                if (desc.isEmpty || amountText.isEmpty) return;
                 
-                if (amountController.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Please enter an amount')),
-                  );
-                  return;
-                }
+                final amount = double.tryParse(amountText);
+                if (amount == null || amount <= 0) return;
                 
-                final amount = double.tryParse(amountController.text);
-                if (amount == null || amount <= 0) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Please enter a valid amount')),
-                  );
-                  return;
-                }
-                
-                // Update transaction
                 final updatedTransaction = {
                   'transactionId': transaction.transactionId,
-                  'description': descriptionController.text.trim(),
+                  'description': desc,
                   'amount': amount,
                   'type': selectedType,
                   'date': selectedDate.toIso8601String(),
@@ -948,19 +851,13 @@ class _TripPageState extends State<TripPage> {
                   'splitCount': 1,
                 };
                 
-                // Delete old transaction and add updated one
                 await TripStorageService.deleteTripTransaction(widget.trip.tripId, transaction.transactionId);
                 await TripStorageService.addTripTransaction(widget.trip.tripId, updatedTransaction);
+                if (!mounted) return;
                 Navigator.of(context).pop();
                 await _loadTransactions();
               },
-              child: Text(
-                'Update',
-                style: GoogleFonts.nunito(
-                  color: Colors.green,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              child: const Text('Update', style: TextStyle(color: Colors.green)),
             ),
           ],
         ),
@@ -972,7 +869,7 @@ class _TripPageState extends State<TripPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Color(0xFF1A1A1A),
+        backgroundColor: const Color(0xFF1A1A1A),
         title: Text(
           'Delete Transaction',
           style: GoogleFonts.nunito(
@@ -983,32 +880,21 @@ class _TripPageState extends State<TripPage> {
         ),
         content: Text(
           'Are you sure you want to delete "${transaction.description}"?',
-          style: GoogleFonts.nunito(color: Colors.white70),
+          style: const TextStyle(color: Colors.white70),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text(
-              'Cancel',
-              style: GoogleFonts.nunito(
-                color: Colors.white70,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
           ),
           TextButton(
             onPressed: () async {
               await TripStorageService.deleteTripTransaction(widget.trip.tripId, transaction.transactionId);
+              if (!mounted) return;
               Navigator.of(context).pop();
               await _loadTransactions();
             },
-            child: Text(
-              'Delete',
-              style: GoogleFonts.nunito(
-                color: Colors.red,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -1016,44 +902,23 @@ class _TripPageState extends State<TripPage> {
   }
 
   void _showCategoryTransactions(String category) {
-    // Calculate category analytics
     final categoryTransactions = _transactions.where((t) => t.category == category && t.type == 'Debit').toList();
     
     if (categoryTransactions.isEmpty) {
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          backgroundColor: Color(0xFF1A1A1A),
-          title: Text(
-            category,
-            style: GoogleFonts.nunito(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          content: Text(
-            'No transactions found for this category.',
-            style: GoogleFonts.nunito(color: Colors.white70),
-          ),
+          backgroundColor: const Color(0xFF1A1A1A),
+          title: Text(category, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          content: const Text('No transactions found for this category.', style: TextStyle(color: Colors.white70)),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(
-                'Close',
-                style: GoogleFonts.nunito(
-                  color: Colors.green,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
+            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close', style: TextStyle(color: Colors.green))),
           ],
         ),
       );
       return;
     }
     
-    // Calculate analytics
     final totalSpent = categoryTransactions.fold(0.0, (sum, t) => sum + t.amount);
     final daysUsed = categoryTransactions.map((t) => t.date.day).toSet().length;
     final avgPerDay = daysUsed > 0 ? totalSpent / daysUsed : 0.0;
@@ -1063,515 +928,128 @@ class _TripPageState extends State<TripPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Color(0xFF1A1A1A),
-        title: Text(
-          category,
-          style: GoogleFonts.nunito(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: Container(
-          width: double.maxFinite,
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: Text(category, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Total Spent
-              Container(
-                padding: EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.withOpacity(0.3)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Total Spent',
-                      style: GoogleFonts.nunito(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      '₹${totalSpent.toStringAsFixed(0)}',
-                      style: GoogleFonts.nunito(
-                        color: Colors.red,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(height: 16),
-              
-              // Average Per Day
-              Container(
-                padding: EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green.withOpacity(0.3)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Average Per Day',
-                      style: GoogleFonts.nunito(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      '₹${avgPerDay.toStringAsFixed(0)}',
-                      style: GoogleFonts.nunito(
-                        color: Colors.green,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(height: 16),
-              
-              // Days Used
-              Container(
-                padding: EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Days Used',
-                      style: GoogleFonts.nunito(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      '$daysUsed days',
-                      style: GoogleFonts.nunito(
-                        color: Colors.blue,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              
-              // Budget Progress (if budget is set)
+              _analyticsCard('Total Spent', '₹${totalSpent.toStringAsFixed(0)}', Colors.red),
+              const SizedBox(height: 12),
+              _analyticsCard('Average Per Day', '₹${avgPerDay.toStringAsFixed(0)}', Colors.green),
+              const SizedBox(height: 12),
+              _analyticsCard('Days Used', '$daysUsed days', Colors.blue),
               if (categoryBudget != null) ...[
-                SizedBox(height: 16),
-                Container(
-                  padding: EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Budget Progress',
-                            style: GoogleFonts.nunito(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          Text(
-                            '${((totalSpent / categoryBudget) * 100).toStringAsFixed(1)}%',
-                            style: GoogleFonts.nunito(
-                              color: isOverBudget ? Colors.red : Colors.orange,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        '₹${totalSpent.toStringAsFixed(0)} / ₹${categoryBudget.toStringAsFixed(0)}',
-                        style: GoogleFonts.nunito(
-                          color: Colors.white70,
-                          fontSize: 14,
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Container(
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: FractionallySizedBox(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: (totalSpent / categoryBudget).clamp(0.0, 1.0),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: isOverBudget ? Colors.red : Colors.orange,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (isOverBudget) ...[
-                        SizedBox(height: 8),
-                        Text(
-                          'Over budget by ₹${(totalSpent - categoryBudget).toStringAsFixed(0)}',
-                          style: GoogleFonts.nunito(
-                            color: Colors.red,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+                const SizedBox(height: 12),
+                _budgetCard(totalSpent, categoryBudget, isOverBudget),
               ],
             ],
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(
-              'Close',
-              style: GoogleFonts.nunito(
-                color: Colors.green,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close', style: TextStyle(color: Colors.green))),
+        ],
+      ),
+    );
+  }
+
+  Widget _analyticsCard(String label, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.white, fontSize: 14)),
+          Text(value, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  Widget _budgetCard(double spent, double budget, bool isOver) {
+    final progress = (spent / budget).clamp(0.0, 1.0);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Budget', style: TextStyle(color: Colors.white, fontSize: 14)),
+              Text('${(progress * 100).toStringAsFixed(1)}%', style: TextStyle(color: isOver ? Colors.red : Colors.orange, fontWeight: FontWeight.bold)),
+            ],
           ),
+          const SizedBox(height: 8),
+          LinearProgressIndicator(value: progress, backgroundColor: Colors.white12, color: isOver ? Colors.red : Colors.orange),
+          const SizedBox(height: 4),
+          Text('₹${spent.toStringAsFixed(0)} / ₹${budget.toStringAsFixed(0)}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
         ],
       ),
     );
   }
 
   void _showTripAnalytics() {
-    // Calculate analytics
     final totalSpent = _getTotalSpent();
     final categoryData = <String, Map<String, dynamic>>{};
     
-    // Group transactions by category and calculate daily averages
     for (final t in _transactions) {
       if (t.type != 'Debit') continue;
-      
       if (!categoryData.containsKey(t.category)) {
-        categoryData[t.category] = {
-          'total': 0.0,
-          'days': <int>{},
-        };
+        categoryData[t.category] = {'total': 0.0, 'days': <int>{}};
       }
       categoryData[t.category]!['total'] += t.amount;
       categoryData[t.category]!['days'].add(t.date.day);
     }
     
-    // Calculate average per day for each category
-    final categoryExpenses = <String, Map<String, double>>{};
-    for (final entry in categoryData.entries) {
-      final category = entry.key;
-      final total = entry.value['total'] as double;
-      final daysUsed = (entry.value['days'] as Set<int>).length;
-      final avgPerDay = daysUsed > 0 ? total / daysUsed : 0.0;
-      
-      categoryExpenses[category] = {
-        'total': total,
-        'avgPerDay': avgPerDay,
-        'daysUsed': daysUsed.toDouble(),
-      };
-    }
-    
-    // Calculate overall average expense per category
-    final avgExpense = categoryExpenses.isNotEmpty 
-        ? totalSpent / categoryExpenses.length 
-        : 0.0;
-    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Color(0xFF1A1A1A),
-        title: Text(
-          '${widget.trip.name} Analytics',
-          style: GoogleFonts.nunito(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: Container(
-          width: double.maxFinite,
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: Text('${widget.trip.name} Analytics', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Total Expense
-              Container(
-                padding: EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.withOpacity(0.3)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Total Spent',
-                      style: GoogleFonts.nunito(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      '₹${totalSpent.toStringAsFixed(0)}',
-                      style: GoogleFonts.nunito(
-                        color: Colors.red,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(height: 16),
-              
-              // Budget Progress (if budget is set)
+              _analyticsCard('Total Trip Spent', '₹${totalSpent.toStringAsFixed(0)}', Colors.red),
               if (widget.trip.budget != null && widget.trip.budget! > 0) ...[
-                Container(
-                  padding: EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Budget Progress',
-                            style: GoogleFonts.nunito(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          Text(
-                            '${((totalSpent / widget.trip.budget!) * 100).toStringAsFixed(1)}%',
-                            style: GoogleFonts.nunito(
-                              color: totalSpent > widget.trip.budget! ? Colors.red : Colors.blue,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        '₹${totalSpent.toStringAsFixed(0)} / ₹${widget.trip.budget!.toStringAsFixed(0)}',
-                        style: GoogleFonts.nunito(
-                          color: Colors.white70,
-                          fontSize: 14,
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Container(
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: FractionallySizedBox(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: (totalSpent / widget.trip.budget!).clamp(0.0, 1.0),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: totalSpent > widget.trip.budget! ? Colors.red : Colors.blue,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox(height: 16),
+                const SizedBox(height: 12),
+                _budgetCard(totalSpent, widget.trip.budget!, totalSpent > widget.trip.budget!),
               ],
-              
-              // Category Breakdown
-              Text(
-                'Category Breakdown',
-                style: GoogleFonts.nunito(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              SizedBox(height: 8),
-              
-              // Category List
-              ...categoryExpenses.entries.map((entry) {
-                final categoryData = entry.value;
-                final total = categoryData['total']!;
-                final avgPerDay = categoryData['avgPerDay']!;
-                final daysUsed = categoryData['daysUsed']!.toInt();
-                final percentage = totalSpent > 0 ? (total / totalSpent * 100) : 0;
-                final categoryBudget = widget.trip.categoryBudgets?[entry.key];
-                final isOverBudget = categoryBudget != null && total > categoryBudget;
-                
+              const SizedBox(height: 20),
+              const Text('Category Breakdown', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              ...categoryData.entries.map((e) {
+                final total = e.value['total'] as double;
+                final budget = widget.trip.categoryBudgets?[e.key];
                 return Container(
-                  margin: EdgeInsets.only(bottom: 8),
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: isOverBudget ? Colors.red.withOpacity(0.3) : Colors.white.withOpacity(0.1),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(8)),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              entry.key,
-                              style: GoogleFonts.nunito(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            '₹${total.toStringAsFixed(0)} (${percentage.toStringAsFixed(1)}%)',
-                            style: GoogleFonts.nunito(
-                              color: isOverBudget ? Colors.red : Colors.white70,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Avg/day: ₹${avgPerDay.toStringAsFixed(0)}',
-                            style: GoogleFonts.nunito(
-                              color: Colors.green,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          Text(
-                            'Used $daysUsed days',
-                            style: GoogleFonts.nunito(
-                              color: Colors.white60,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (categoryBudget != null) ...[
-                        SizedBox(height: 4),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Budget: ₹${categoryBudget.toStringAsFixed(0)}',
-                              style: GoogleFonts.nunito(
-                                color: Colors.white60,
-                                fontSize: 11,
-                              ),
-                            ),
-                            Text(
-                              isOverBudget ? 'Over budget!' : 'On track',
-                              style: GoogleFonts.nunito(
-                                color: isOverBudget ? Colors.red : Colors.green,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                      Text(e.key, style: const TextStyle(color: Colors.white)),
+                      Text('₹${total.toStringAsFixed(0)}', style: TextStyle(color: (budget != null && total > budget) ? Colors.red : Colors.white70)),
                     ],
                   ),
                 );
-              }).toList(),
-              
-              SizedBox(height: 16),
-              
-              // Average Expense
-              Container(
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green.withOpacity(0.3)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Average per Category',
-                      style: GoogleFonts.nunito(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      '₹${avgExpense.toStringAsFixed(0)}',
-                      style: GoogleFonts.nunito(
-                        color: Colors.green,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              }),
             ],
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(
-              'Close',
-              style: GoogleFonts.nunito(
-                color: Colors.green,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close', style: TextStyle(color: Colors.green))),
         ],
       ),
     );
@@ -1580,29 +1058,22 @@ class _TripPageState extends State<TripPage> {
   void _showTripOptions() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Color(0xFF1A1A1A),
-      builder: (context) => Container(
-        padding: EdgeInsets.all(20),
+      backgroundColor: const Color(0xFF1A1A1A),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: Icon(Icons.edit, color: Colors.white),
-              title: Text(
-                'Edit Trip',
-                style: GoogleFonts.nunito(color: Colors.white),
-              ),
+              leading: const Icon(Icons.edit, color: Colors.white),
+              title: const Text('Edit Trip', style: TextStyle(color: Colors.white)),
               onTap: () {
                 Navigator.pop(context);
-                // TODO: Implement edit trip
               },
             ),
             ListTile(
-              leading: Icon(Icons.delete, color: Colors.red),
-              title: Text(
-                'Delete Trip',
-                style: GoogleFonts.nunito(color: Colors.red),
-              ),
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text('Delete Trip', style: TextStyle(color: Colors.red)),
               onTap: () {
                 Navigator.pop(context);
                 _showDeleteTripConfirmation();
@@ -1618,43 +1089,19 @@ class _TripPageState extends State<TripPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Color(0xFF1A1A1A),
-        title: Text(
-          'Delete Trip',
-          style: GoogleFonts.nunito(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: Text(
-          'Are you sure you want to delete "${widget.trip.name}"? This action cannot be undone.',
-          style: GoogleFonts.nunito(color: Colors.white70),
-        ),
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text('Delete Trip', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Text('Are you sure you want to delete "${widget.trip.name}"? This action cannot be undone.', style: const TextStyle(color: Colors.white70)),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(
-              'Cancel',
-              style: GoogleFonts.nunito(
-                color: Colors.white70,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel', style: TextStyle(color: Colors.white70))),
           TextButton(
             onPressed: () async {
               await TripStorageService.deleteTrip(widget.trip.tripId);
-              Navigator.of(context).pop(); // Close dialog
-              Navigator.of(context).pop(); // Go back to home
+              if (!mounted) return;
+              Navigator.of(context).pop();
+              Navigator.of(context).pop();
             },
-            child: Text(
-              'Delete',
-              style: GoogleFonts.nunito(
-                color: Colors.red,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -1662,44 +1109,25 @@ class _TripPageState extends State<TripPage> {
   }
 
   double _getTotalSpent() {
-    return _transactions
-        .where((t) => t.type == 'Debit')
-        .fold(0.0, (sum, t) => sum + t.amount);
+    return _transactions.where((t) => t.type == 'Debit').fold(0.0, (sum, t) => sum + t.amount);
   }
 
   double _getCategoryTotal(String category) {
-    return _transactions
-        .where((t) => t.category == category && t.type == 'Debit')
-        .fold(0.0, (sum, t) => sum + t.amount);
+    return _transactions.where((t) => t.category == category && t.type == 'Debit').fold(0.0, (sum, t) => sum + t.amount);
   }
 
   Color _getCategoryColor(String category) {
-    final colors = [
-      Colors.blue,
-      Colors.green,
-      Colors.orange,
-      Colors.purple,
-      Colors.teal,
-      Colors.pink,
-      Colors.indigo,
-      Colors.amber,
-    ];
+    final colors = [Colors.blue, Colors.green, Colors.orange, Colors.purple, Colors.teal, Colors.pink, Colors.indigo, Colors.amber];
     final index = category.hashCode % colors.length;
     return colors[index];
   }
 
   String _formatDate(DateTime date) {
     final now = DateTime.now();
-    final difference = now.difference(date).inDays;
-    
-    if (difference == 0) {
-      return 'Today';
-    } else if (difference == 1) {
-      return 'Yesterday';
-    } else if (difference < 7) {
-      return '${difference} days ago';
-    } else {
-      return '${date.day}/${date.month}/${date.year}';
-    }
+    final diff = now.difference(date).inDays;
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Yesterday';
+    if (diff < 7) return '$diff days ago';
+    return '${date.day}/${date.month}/${date.year}';
   }
 }

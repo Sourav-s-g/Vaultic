@@ -14,6 +14,7 @@ class SupabaseService {
     }
   }
 
+
   // Helper to check if session is valid
   static bool _isSessionValid() {
     try {
@@ -23,6 +24,20 @@ class SupabaseService {
       // Session refresh failed - likely corrupted session
       print('Warning: Session validation failed: $e');
       return false;
+    }
+  }
+
+  // In SupabaseService
+  static Future<void> deleteCategory(String name) async {
+    if (!_isSessionValid() || userId == null) return;
+    try {
+      await _client
+          .from('categories')
+          .delete()
+          .eq('user_id', userId!)
+          .eq('name', name);
+    } catch (e) {
+      print('Error deleting category: $e');
     }
   }
 

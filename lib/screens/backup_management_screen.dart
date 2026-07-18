@@ -26,13 +26,15 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
     setState(() => _isLoading = true);
     try {
       final backups = await HybridStorageService.getAllBackups();
-      setState(() {
-        _backups = backups;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() => _isLoading = false);
       if (mounted) {
+        setState(() {
+          _backups = backups;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to load backups: $e')),
         );
@@ -42,7 +44,9 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
 
   Future<void> _loadAutoBackupStatus() async {
     final enabled = await HybridStorageService.isAutoBackupEnabled();
-    setState(() => _autoBackupEnabled = enabled);
+    if (mounted) {
+      setState(() => _autoBackupEnabled = enabled);
+    }
   }
 
   Future<void> _createBackup() async {
@@ -74,10 +78,12 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Restore Backup?'),
+        backgroundColor: const Color(0xFF0E1F1F),
+        title: Text('Restore Backup?', style: GoogleFonts.nunito(color: Colors.white)),
         content: Text(
           'This will restore data from "${backup['name'] ?? 'Unknown'}" (${_formatDate(backup['timestamp'])}).\n\n'
           'Current data will be replaced. This action cannot be undone.',
+          style: GoogleFonts.nunito(color: Colors.white70),
         ),
         actions: [
           TextButton(
@@ -124,7 +130,6 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
     try {
       final jsonString = await HybridStorageService.exportBackupToJson(backup);
       
-      // Share the backup file
       await Share.share(
         jsonString,
         subject: 'Vaultic Backup - ${backup['name']}',
@@ -154,10 +159,12 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Backup?'),
+        backgroundColor: const Color(0xFF0E1F1F),
+        title: Text('Delete Backup?', style: GoogleFonts.nunito(color: Colors.white)),
         content: Text(
           'Are you sure you want to delete "${backup['name'] ?? 'Unknown'}"?\n\n'
           'This action cannot be undone.',
+          style: GoogleFonts.nunito(color: Colors.white70),
         ),
         actions: [
           TextButton(
@@ -204,9 +211,9 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
 
   Future<void> _toggleAutoBackup(bool value) async {
     await HybridStorageService.setAutoBackupEnabled(value);
-    setState(() => _autoBackupEnabled = value);
-    
     if (mounted) {
+      setState(() => _autoBackupEnabled = value);
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(value ? 'Auto-backup enabled' : 'Auto-backup disabled'),
@@ -230,132 +237,155 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF032221),
-      appBar: AppBar(
-        title: Text(
-          'Backup Management',
-          style: GoogleFonts.nunito(color: Colors.white),
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF032221), Colors.black],
+            ),
+          ),
+          child: AppBar(
+            title: Text(
+              'Backup Management',
+              style: GoogleFonts.nunito(color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            iconTheme: const IconThemeData(color: Colors.white),
+          ),
         ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Auto-backup toggle
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.06),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white.withOpacity(0.1)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF032221), Color(0xFF0C4340), Color(0xFF032221)],
+          ),
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white.withOpacity(0.1)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Auto Backup',
-                        style: GoogleFonts.nunito(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Auto Backup',
+                            style: GoogleFonts.nunito(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Automatically backup daily',
+                            style: GoogleFonts.nunito(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Automatically backup daily',
-                        style: GoogleFonts.nunito(
-                          color: Colors.white70,
-                          fontSize: 12,
-                        ),
+                      Switch(
+                        value: _autoBackupEnabled,
+                        onChanged: _toggleAutoBackup,
+                        activeColor: Colors.green,
                       ),
                     ],
                   ),
-                  Switch(
-                    value: _autoBackupEnabled,
-                    onChanged: _toggleAutoBackup,
-                    activeColor: Colors.green,
+                ),
+                const SizedBox(height: 16),
+                
+                ElevatedButton.icon(
+                  onPressed: _createBackup,
+                  icon: const Icon(Icons.backup),
+                  label: const Text(
+                    'Create New Backup',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            
-            // Create backup button
-            ElevatedButton.icon(
-              onPressed: _createBackup,
-              icon: const Icon(Icons.backup),
-              label: Text(
-                'Create New Backup',
-                style: GoogleFonts.nunito(fontSize: 16),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            
-            // Backups list
-            Text(
-              'Backup History (${_backups.length})',
-              style: GoogleFonts.nunito(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 12),
-            
-            if (_isLoading)
-              const Center(
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
-                ),
-              )
-            else if (_backups.isEmpty)
-              Container(
-                padding: const EdgeInsets.all(40),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  children: [
-                    Icon(Icons.backup_outlined, size: 64, color: Colors.grey[400]),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No Backups Yet',
-                      style: GoogleFonts.nunito(
-                        color: Colors.grey[400],
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Create your first backup to get started',
-                      style: GoogleFonts.nunito(
-                        color: Colors.grey[500],
-                        fontSize: 14,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
+                  ),
                 ),
-              )
-            else
-              ..._backups.map((backup) => _buildBackupCard(backup)),
-          ],
+                const SizedBox(height: 24),
+                
+                Text(
+                  'Backup History (${_backups.length})',
+                  style: GoogleFonts.nunito(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                
+                if (_isLoading)
+                  const Center(
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
+                    ),
+                  )
+                else if (_backups.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(40),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(Icons.backup_outlined, size: 64, color: Colors.grey[400]),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No Backups Yet',
+                          style: GoogleFonts.nunito(
+                            color: Colors.grey[400],
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Create your first backup to get started',
+                          style: GoogleFonts.nunito(
+                            color: Colors.grey[500],
+                            fontSize: 14,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  ..._backups.map((backup) => _buildBackupCard(backup)),
+                const SizedBox(height: 40),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -372,7 +402,7 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
+        color: Colors.white.withOpacity(0.05),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white.withOpacity(0.1)),
       ),
@@ -422,33 +452,33 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
                   }
                 },
                 itemBuilder: (context) => [
-                  PopupMenuItem(
+                  const PopupMenuItem(
                     value: 'restore',
                     child: Row(
                       children: [
-                        const Icon(Icons.restore, color: Colors.white, size: 20),
-                        const SizedBox(width: 8),
-                        Text('Restore', style: GoogleFonts.nunito(color: Colors.white)),
+                        Icon(Icons.restore, color: Colors.white, size: 20),
+                        SizedBox(width: 8),
+                        Text('Restore', style: TextStyle(color: Colors.white)),
                       ],
                     ),
                   ),
-                  PopupMenuItem(
+                  const PopupMenuItem(
                     value: 'export',
                     child: Row(
                       children: [
-                        const Icon(Icons.share, color: Colors.white, size: 20),
-                        const SizedBox(width: 8),
-                        Text('Export', style: GoogleFonts.nunito(color: Colors.white)),
+                        Icon(Icons.share, color: Colors.white, size: 20),
+                        SizedBox(width: 8),
+                        Text('Export', style: TextStyle(color: Colors.white)),
                       ],
                     ),
                   ),
-                  PopupMenuItem(
+                  const PopupMenuItem(
                     value: 'delete',
                     child: Row(
                       children: [
-                        const Icon(Icons.delete, color: Colors.red, size: 20),
-                        const SizedBox(width: 8),
-                        Text('Delete', style: GoogleFonts.nunito(color: Colors.red)),
+                        Icon(Icons.delete, color: Colors.red, size: 20),
+                        SizedBox(width: 8),
+                        Text('Delete', style: TextStyle(color: Colors.red)),
                       ],
                     ),
                   ),
@@ -459,9 +489,9 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
           const SizedBox(height: 12),
           Row(
             children: [
-              _buildInfoChip('${transactionCount} transactions', Icons.receipt),
+              _buildInfoChip('$transactionCount txns', Icons.receipt),
               const SizedBox(width: 8),
-              _buildInfoChip('${categoryCount} categories', Icons.category),
+              _buildInfoChip('$categoryCount cats', Icons.category),
               const SizedBox(width: 8),
               _buildInfoChip(size, Icons.storage),
             ],
@@ -475,7 +505,7 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
+        color: Colors.white.withOpacity(0.08),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -495,4 +525,3 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
     );
   }
 }
-

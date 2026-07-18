@@ -2,10 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 import '../models/transaction_history_model.dart';
 import '../services/hybrid_storage_service.dart';
 import '../services/pdf_service.dart';
@@ -22,7 +19,6 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
   bool _isGeneratingPdf = false;
   TransactionHistoryResponse? _transactionResponse;
   String _errorMessage = '';
-  String _query = '';
   String _filteredQuery = '';
   int _weekOffset = 0; // 0=current week, 1=previous week
   Timer? _debounceTimer;
@@ -43,8 +39,6 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     super.dispose();
   }
 
-  
-
   Future<void> _loadTransactionHistory({bool loadMore = false}) async {
     if (!loadMore) {
       setState(() {
@@ -60,33 +54,37 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
       final raw = await HybridStorageService.getTransactions();
       final allTxns = raw.map((m) => _transactionFromMap(m)).toList();
       allTxns.sort((a, b) => b.date.compareTo(a.date));
-      
+
       final startIndex = _currentPage * _pageSize;
       final endIndex = (startIndex + _pageSize).clamp(0, allTxns.length);
       final pageTxns = allTxns.sublist(startIndex, endIndex);
-      
-      setState(() {
-        if (loadMore) {
-          _cachedTransactions.addAll(pageTxns);
-        } else {
-          _cachedTransactions = pageTxns;
-        }
-        
-        _hasMoreData = endIndex < allTxns.length;
-        _currentPage++;
-        
-        _transactionResponse = TransactionHistoryResponse(
-          success: true,
-          message: 'ok',
-          transactions: _cachedTransactions,
-        );
-        _isLoading = false;
-      });
+
+      if (mounted) {
+        setState(() {
+          if (loadMore) {
+            _cachedTransactions.addAll(pageTxns);
+          } else {
+            _cachedTransactions = pageTxns;
+          }
+
+          _hasMoreData = endIndex < allTxns.length;
+          _currentPage++;
+
+          _transactionResponse = TransactionHistoryResponse(
+            success: true,
+            message: 'ok',
+            transactions: _cachedTransactions,
+          );
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Failed to load transactions: $e';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Failed to load transactions: $e';
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -99,15 +97,15 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: const Color(0xFF032221),
       appBar: PreferredSize(
-        preferredSize: Size.fromHeight(kToolbarHeight),
+        preferredSize: const Size.fromHeight(kToolbarHeight),
         child: Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [Color(0xFF032221), Colors.black],
+              colors: [Color(0xFF032221), Color(0xFF0C4340)],
             ),
           ),
           child: AppBar(
@@ -121,17 +119,17 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
             backgroundColor: Colors.transparent,
             elevation: 0,
             leading: IconButton(
-              icon: Icon(Icons.arrow_back, color: Colors.white),
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
               onPressed: () => Navigator.pop(context),
             ),
             actions: [
               IconButton(
-                icon: Icon(Icons.picture_as_pdf, color: Colors.white),
+                icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
                 onPressed: _showPdfExportDialog,
                 tooltip: 'Export PDF',
               ),
               IconButton(
-                icon: Icon(Icons.refresh, color: Colors.white),
+                icon: const Icon(Icons.refresh, color: Colors.white),
                 onPressed: _loadTransactionHistory,
               ),
             ],
@@ -139,11 +137,13 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
         ),
       ),
       body: Container(
+        width: double.infinity,
+        height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFF032221), Colors.black, Color(0xFF032221)],
+            colors: [Color(0xFF032221), Color(0xFF0C4340), Color(0xFF032221)],
           ),
         ),
         child: _buildBody(),
@@ -152,8 +152,8 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
   }
 
   Widget _buildBody() {
-    if (_isLoading) {
-      return Center(
+    if (_isLoading && _cachedTransactions.isEmpty) {
+      return const Center(
         child: CircularProgressIndicator(
           valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
         ),
@@ -164,12 +164,12 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
       return _buildErrorWidget();
     }
 
-    if (_transactionResponse?.transactions == null || 
+    if (_transactionResponse?.transactions == null ||
         _transactionResponse!.transactions!.isEmpty) {
       return _buildEmptyWidget();
     }
 
-    return _buildTransactionList();
+    return SafeArea(child: _buildTransactionList());
   }
 
   Widget _buildErrorWidget() {
@@ -182,7 +182,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
             size: 64,
             color: Colors.red[300],
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           Text(
             'Oops! Something went wrong',
             style: GoogleFonts.montserrat(
@@ -191,7 +191,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
               fontWeight: FontWeight.w600,
             ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             _errorMessage,
             style: GoogleFonts.openSans(
@@ -200,15 +200,15 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
             ),
             textAlign: TextAlign.center,
           ),
-          SizedBox(height: 24),
+          const SizedBox(height: 24),
           ElevatedButton(
             onPressed: _loadTransactionHistory,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green,
               foregroundColor: Colors.white,
-              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
-            child: Text('Try Again'),
+            child: const Text('Try Again'),
           ),
         ],
       ),
@@ -225,7 +225,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
             size: 64,
             color: Colors.grey[400],
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           Text(
             'No Transactions Yet',
             style: GoogleFonts.montserrat(
@@ -234,7 +234,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
               fontWeight: FontWeight.w600,
             ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             'Your transaction history will appear here',
             style: GoogleFonts.openSans(
@@ -248,78 +248,99 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
   }
 
   void _onSearchChanged(String value) {
-    _query = value;
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(Duration(milliseconds: 300), () {
-      setState(() {
-        _filteredQuery = value;
-      });
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        setState(() {
+          _filteredQuery = value;
+        });
+      }
     });
   }
 
   Widget _buildTransactionList() {
-    final all = _cachedTransactions.isNotEmpty ? _cachedTransactions : _transactionResponse?.transactions ?? [];
-    final txns = _filteredQuery.isEmpty
-        ? all
-        : all.where((t) =>
-            t.description.toLowerCase().contains(_filteredQuery.toLowerCase()) ||
-            t.category.toLowerCase().contains(_filteredQuery.toLowerCase())
+    return FutureBuilder<List<Map<String, dynamic>>>(
+        future: HybridStorageService.getTransactions(),
+        builder: (context, transactionsSnapshot) {
+          if (!transactionsSnapshot.hasData) {
+            return const Center(child: CircularProgressIndicator(color: Colors.green));
+          }
+
+          final allTxns = transactionsSnapshot.data!.map((m) => _transactionFromMap(m)).toList();
+          final now = DateTime.now();
+
+          // 1. Monthly Summary (Current Month only)
+          // We exclude rollover helper entries to show ONLY "real" monthly income/spending
+          final monthTxns = allTxns.where((t) =>
+          t.date.year == now.year &&
+              t.date.month == now.month &&
+              !t.description.contains('Balance carried forward')
           ).toList();
-    
-    // Restrict calculations to current month
-    final now = DateTime.now();
-    final monthTxns = txns.where((t) => t.date.year == now.year && t.date.month == now.month).toList();
-    
-    // Calculate totals for current month: Credits add to balance, Debits subtract from balance
-    final totalCredits = monthTxns.where((t)=> t.type == 'Credit').fold(0.0, (s,t)=> s + t.amount);
-    final totalDebits = monthTxns.where((t)=> t.type == 'Debit').fold(0.0, (s,t)=> s + t.amount);
 
-    return FutureBuilder<double>(
-      future: HybridStorageService.getInitialBalance(),
-      builder: (context, snapshot) {
-        // Get initial balance (starting balance when app was first used)
-        final initialBalance = snapshot.data ?? 0.0;
-        
-        // Balance = Initial Balance + Credits - Debits
-        // This ensures balance reflects your actual available money
-        final balance = initialBalance + totalCredits - totalDebits;
+          final monthlyIncome = monthTxns.where((t) => t.type == 'Credit').fold(0.0, (s, t) => s + t.amount);
+          final monthlySpent = monthTxns.where((t) => t.type == 'Debit').fold(0.0, (s, t) => s + t.amount);
 
-        return ListView(
-          padding: EdgeInsets.all(16),
-          children: [
-            _buildRowSummaryAndPie(monthTxns, totalCredits, totalDebits, balance),
-        SizedBox(height: 12),
-        _buildWeeklyBar(monthTxns),
-        SizedBox(height: 12),
-        _buildSearchField(),
-        SizedBox(height: 16),
-        ..._buildGroupedByDate(txns),
-        if (_hasMoreData && !_isLoading)
-          Container(
-            margin: EdgeInsets.symmetric(vertical: 16),
-            child: Center(
-              child: ElevatedButton(
-                onPressed: _loadMoreTransactions,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                ),
-                child: Text('Load More'),
-              ),
-            ),
-          ),
-        if (_isLoading && _cachedTransactions.isNotEmpty)
-          Container(
-            margin: EdgeInsets.symmetric(vertical: 16),
-            child: Center(
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
-              ),
-            ),
-          ),
-      ],
-        );
-      },
+          // 2. Cumulative Total Balance (Initial + All Time Real Credits - All Time Debits)
+          return FutureBuilder<double>(
+              future: HybridStorageService.getInitialBalance(),
+              builder: (context, initialSnapshot) {
+                final initialBalance = initialSnapshot.data ?? 0.0;
+
+                double totalCredits = initialBalance;
+                double totalDebits = 0.0;
+
+                for (var t in allTxns) {
+                  // Ignore rollover helper entries to avoid double counting balances from previous months
+                  if (t.description.contains('Balance carried forward')) continue;
+
+                  if (t.type == 'Credit') {
+                    totalCredits += t.amount;
+                  } else {
+                    totalDebits += t.amount;
+                  }
+                }
+
+                final netWalletBalance = totalCredits - totalDebits;
+
+                // Filter for display in the history list (Search/Pagination)
+                // By default, we show the full history but prioritize current month logic for summary
+                final displayList = _filteredQuery.isEmpty
+                    ? _cachedTransactions
+                    : allTxns.where((t) =>
+                t.description.toLowerCase().contains(_filteredQuery.toLowerCase()) ||
+                    t.category.toLowerCase().contains(_filteredQuery.toLowerCase())
+                ).toList();
+
+                return ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    _buildRowSummaryAndPie(monthTxns, monthlyIncome, monthlySpent, netWalletBalance),
+                    const SizedBox(height: 12),
+                    _buildWeeklyBar(monthTxns),
+                    const SizedBox(height: 12),
+                    _buildSearchField(),
+                    const SizedBox(height: 16),
+                    ..._buildGroupedByDate(displayList),
+                    if (_hasMoreData && !_isLoading && _filteredQuery.isEmpty)
+                      Container(
+                        margin: const EdgeInsets.symmetric(vertical: 16),
+                        child: Center(
+                          child: ElevatedButton(
+                            onPressed: _loadMoreTransactions,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: const Text('Load More'),
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 40),
+                  ],
+                );
+              }
+          );
+        }
     );
   }
 
@@ -343,19 +364,18 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     int colorIdx = 0;
     final sections = <PieChartSectionData>[];
     final legendItems = <Widget>[];
-    
-    // Calculate percentages based on total debits (expenses)
+
     final totalDebitsForPercentage = byCategory.values.fold(0.0, (sum, amount) => sum + amount);
-    final totalBase = totalDebitsForPercentage > 0 ? totalDebitsForPercentage : 1.0; // Avoid division by zero
-    
+    final totalBase = totalDebitsForPercentage > 0 ? totalDebitsForPercentage : 1.0;
+
     byCategory.forEach((cat, amt) {
       final col = colors[colorIdx++ % colors.length];
-      final pct = (amt / totalBase) * 100.0; // Calculate percentage of total debits
+      final pct = (amt / totalBase) * 100.0;
       sections.add(PieChartSectionData(
         value: amt,
         color: col,
         title: '${pct.toStringAsFixed(0)}%',
-        titleStyle: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+        titleStyle: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
       ));
       legendItems.add(Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -371,36 +391,16 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
         ),
       ));
     });
-    
-    // Only show savings section if there's actual savings (positive balance)
-    if (balance > 0) {
-      final savingsPercentage = (balance / totalCredits) * 100.0; // Percentage of credits saved
-      sections.add(PieChartSectionData(
-        value: balance, 
-        color: Colors.green, 
-        title: '${savingsPercentage.toStringAsFixed(0)}%', 
-        titleStyle: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)
-      ));
-      legendItems.add(Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        child: Row(children: [
-          Container(width: 10, height: 10, color: Colors.green),
-          const SizedBox(width: 6),
-          Expanded(child: Text('Balance', style: GoogleFonts.openSans(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis, maxLines: 1)),
-          const SizedBox(width: 4),
-          Text('${savingsPercentage.toStringAsFixed(0)}%', style: GoogleFonts.openSans(color: Colors.white, fontSize: 11)),
-        ]),
-      ));
-    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          padding: EdgeInsets.all(12),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.06),
+            color: Colors.white.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
           ),
           child: Column(
             children: [
@@ -417,7 +417,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                   swapAnimationCurve: Curves.easeOut,
                 ),
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               GridView.count(
                 crossAxisCount: 4,
                 shrinkWrap: true,
@@ -428,21 +428,21 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
             ],
           ),
         ),
-        SizedBox(height: 12),
+        const SizedBox(height: 12),
         Container(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.06),
+            color: Colors.white.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
           ),
           child: Row(
             children: [
-              Expanded(child: _buildSummaryItem('Credits', totalCredits, Colors.white)),
-              SizedBox(width: 12),
-              Expanded(child: _buildSummaryItem('Debits', totalDebits, Colors.white)),
-              SizedBox(width: 12),
-              Expanded(child: _buildSummaryItem('Balance', balance, Colors.white)),
+              Expanded(child: _buildSummaryItem('Monthly Income', totalCredits, Colors.white)),
+              const SizedBox(width: 12),
+              Expanded(child: _buildSummaryItem('Monthly Spent', totalDebits, Colors.white)),
+              const SizedBox(width: 12),
+              Expanded(child: _buildSummaryItem('Total Balance', balance, Colors.greenAccent)),
             ],
           ),
         ),
@@ -470,11 +470,11 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
       },
       child: Container(
         width: double.infinity,
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.06),
+          color: Colors.white.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.1)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -485,33 +485,33 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
               height: 200,
               child: BarChart(
                 BarChartData(
-            gridData: FlGridData(show: true, drawVerticalLine: true, getDrawingHorizontalLine: (v)=> FlLine(color: Colors.white24, strokeWidth: 1)),
-            borderData: FlBorderData(show: true, border: Border.all(color: Colors.white24)),
-            titlesData: FlTitlesData(
-              leftTitles: AxisTitles(
-                axisNameWidget: Text('Amount', style: TextStyle(color: Colors.white70, fontSize: 10)),
-                sideTitles: SideTitles(
-                  showTitles: true,
-                  reservedSize: 40,
-                  getTitlesWidget: (value, meta){
-                    return Text('₹${value.toInt()}', style: TextStyle(color: Colors.white70, fontSize: 10));
-                  },
-                ),
-              ),
-              topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-              rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-              bottomTitles: AxisTitles(
-                axisNameWidget: Text('Days', style: TextStyle(color: Colors.white70, fontSize: 10)),
-                sideTitles: SideTitles(
-                  showTitles: true,
-                  getTitlesWidget: (value, meta){
-                    const labels = ['S','M','T','W','T','F','S'];
-                    final idx = value.toInt().clamp(0, 6);
-                    return Text(labels[idx], style: TextStyle(color: Colors.white70, fontSize: 10));
-                  },
-                ),
-              ),
-            ),
+                  gridData: FlGridData(show: true, drawVerticalLine: true, getDrawingHorizontalLine: (v)=> FlLine(color: Colors.white24, strokeWidth: 1)),
+                  borderData: FlBorderData(show: true, border: Border.all(color: Colors.white24)),
+                  titlesData: FlTitlesData(
+                    leftTitles: AxisTitles(
+                      axisNameWidget: const Text('Amount', style: TextStyle(color: Colors.white70, fontSize: 10)),
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 40,
+                        getTitlesWidget: (value, meta){
+                          return Text('₹${value.toInt()}', style: const TextStyle(color: Colors.white70, fontSize: 10));
+                        },
+                      ),
+                    ),
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    bottomTitles: AxisTitles(
+                      axisNameWidget: const Text('Days', style: TextStyle(color: Colors.white70, fontSize: 10)),
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        getTitlesWidget: (value, meta){
+                          const labels = ['S','M','T','W','T','F','S'];
+                          final idx = value.toInt().clamp(0, 6);
+                          return Text(labels[idx], style: const TextStyle(color: Colors.white70, fontSize: 10));
+                        },
+                      ),
+                    ),
+                  ),
                   barGroups: bars,
                 ),
                 swapAnimationDuration: const Duration(milliseconds: 900),
@@ -531,17 +531,18 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
           '₹${amount.toStringAsFixed(0)}',
           style: GoogleFonts.montserrat(
             color: color,
-            fontSize: 20,
+            fontSize: 18,
             fontWeight: FontWeight.bold,
           ),
         ),
-        SizedBox(height: 4),
+        const SizedBox(height: 4),
         Text(
           label,
           style: GoogleFonts.openSans(
-            color: color.withOpacity(0.8),
-            fontSize: 12,
+            color: Colors.white60,
+            fontSize: 10,
           ),
+          textAlign: TextAlign.center,
         ),
       ],
     );
@@ -549,24 +550,24 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
 
   Widget _buildTransactionCard(Transaction transaction) {
     final isCredit = transaction.type == 'Credit';
-    
+
     return Container(
-      margin: EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
+        color: Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Colors.white.withOpacity(0.1),
+          color: Colors.white.withValues(alpha: 0.1),
           width: 1,
         ),
       ),
       child: ListTile(
-        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: Container(
           width: 48,
           height: 48,
           decoration: BoxDecoration(
-            color: isCredit ? Colors.green.withOpacity(0.2) : Colors.red.withOpacity(0.2),
+            color: isCredit ? Colors.green.withValues(alpha: 0.2) : Colors.red.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
@@ -586,7 +587,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(height: 4),
+            const SizedBox(height: 4),
             Text(
               _formatDate(transaction.date),
               style: GoogleFonts.openSans(
@@ -594,19 +595,19 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                 fontSize: 12,
               ),
             ),
-            Text(
-              transaction.category,
-              style: GoogleFonts.openSans(
-                color: Colors.grey[400],
-                fontSize: 12,
+            if (transaction.category.isNotEmpty)
+              Text(
+                transaction.category,
+                style: GoogleFonts.openSans(
+                  color: Colors.grey[400],
+                  fontSize: 12,
+                ),
               ),
-            ),
           ],
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Show cloud-off icon if transaction is pending sync
             FutureBuilder<bool>(
               future: _checkIfTransactionPendingSync(transaction.transactionId),
               builder: (context, snapshot) {
@@ -616,7 +617,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                     child: Icon(
                       Icons.cloud_off,
                       size: 16,
-                      color: Colors.orange.withOpacity(0.7),
+                      color: Colors.orange.withValues(alpha: 0.7),
                     ),
                   );
                 }
@@ -635,13 +636,13 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                SizedBox(height: 2),
+                const SizedBox(height: 2),
                 Container(
-                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: transaction.status == 'Completed' 
-                        ? Colors.green.withOpacity(0.2) 
-                        : Colors.orange.withOpacity(0.2),
+                    color: transaction.status == 'Completed'
+                        ? Colors.green.withValues(alpha: 0.2)
+                        : Colors.orange.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -655,17 +656,19 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                 ),
               ],
             ),
-            SizedBox(width: 4),
+            const SizedBox(width: 4),
             PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, color: Colors.white70),
+              color: const Color(0xFF0E1F1F),
               onSelected: (v){
                 if (v=='edit') { _showEditDialog(transaction); }
-                if (v=='delete') { 
+                if (v=='delete') {
                   _deleteTransaction(transaction.transactionId);
                 }
               },
               itemBuilder: (ctx)=> const [
-                PopupMenuItem(value: 'edit', child: Text('Edit')),
-                PopupMenuItem(value: 'delete', child: Text('Delete')),
+                PopupMenuItem(value: 'edit', child: Text('Edit', style: TextStyle(color: Colors.white))),
+                PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
               ],
             ),
           ],
@@ -693,90 +696,90 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
-                  controller: amountC, 
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true), 
+                  controller: amountC,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   style: GoogleFonts.nunito(color: Colors.white),
                   decoration: InputDecoration(
                     labelText: 'Amount',
-                    labelStyle: TextStyle(color: Colors.white70),
+                    labelStyle: const TextStyle(color: Colors.white70),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+                      borderSide: const BorderSide(color: Colors.white24),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.green),
+                      borderSide: const BorderSide(color: Colors.green),
                     ),
                   ),
                 ),
                 const SizedBox(height: 16),
                 TextField(
-                  controller: descC, 
+                  controller: descC,
                   style: GoogleFonts.nunito(color: Colors.white),
                   decoration: InputDecoration(
                     labelText: 'Description',
-                    labelStyle: TextStyle(color: Colors.white70),
+                    labelStyle: const TextStyle(color: Colors.white70),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+                      borderSide: const BorderSide(color: Colors.white24),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.green),
+                      borderSide: const BorderSide(color: Colors.green),
                     ),
                   ),
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: type,
-                  style: GoogleFonts.nunito(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'Type',
-                    labelStyle: TextStyle(color: Colors.white70),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.green),
-                    ),
-                  ),
-                  dropdownColor: const Color(0xFF0E1F1F),
-                  items: const [
-                    DropdownMenuItem(value: 'Credit', child: Text('Credit')),
-                    DropdownMenuItem(value: 'Debit', child: Text('Debit'))
-                  ], 
-                  onChanged: (v){ setSb(()=> type = v ?? 'Debit'); }
-                ),
-                if (type == 'Debit') ...[
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: TextEditingController(text: category), 
-                    onChanged: (v)=> category=v, 
+                    value: type,
                     style: GoogleFonts.nunito(color: Colors.white),
                     decoration: InputDecoration(
-                      labelText: 'Category',
-                      labelStyle: TextStyle(color: Colors.white70),
+                      labelText: 'Type',
+                      labelStyle: const TextStyle(color: Colors.white70),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+                        borderSide: const BorderSide(color: Colors.white24),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.green),
+                        borderSide: const BorderSide(color: Colors.green),
+                      ),
+                    ),
+                    dropdownColor: const Color(0xFF0E1F1F),
+                    items: const [
+                      DropdownMenuItem(value: 'Credit', child: Text('Credit')),
+                      DropdownMenuItem(value: 'Debit', child: Text('Debit'))
+                    ],
+                    onChanged: (v){ setSb(()=> type = v ?? 'Debit'); }
+                ),
+                if (type == 'Debit') ...[
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: TextEditingController(text: category),
+                    onChanged: (v)=> category=v,
+                    style: GoogleFonts.nunito(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Category',
+                      labelStyle: const TextStyle(color: Colors.white70),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Colors.white24),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Colors.green),
                       ),
                     ),
                   ),
@@ -786,29 +789,29 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                   Text('Date: ${_formatDate(date)}', style: GoogleFonts.openSans(color: Colors.white70)),
                   const Spacer(),
                   TextButton(
-                    onPressed: () async { 
-                      final d = await showDatePicker(
-                        context: ctx, 
-                        firstDate: DateTime(2020), 
-                        lastDate: DateTime.now().add(const Duration(days: 365)), 
-                        initialDate: date,
-                        builder: (context, child) {
-                          return Theme(
-                            data: Theme.of(context).copyWith(
-                              colorScheme: ColorScheme.dark(
-                                primary: Colors.green,
-                                onPrimary: Colors.white,
-                                surface: const Color(0xFF0E1F1F),
-                                onSurface: Colors.white,
+                      onPressed: () async {
+                        final d = await showDatePicker(
+                          context: ctx,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime.now().add(const Duration(days: 365)),
+                          initialDate: date,
+                          builder: (context, child) {
+                            return Theme(
+                              data: Theme.of(context).copyWith(
+                                colorScheme: ColorScheme.dark(
+                                  primary: Colors.green,
+                                  onPrimary: Colors.white,
+                                  surface: const Color(0xFF0E1F1F),
+                                  onSurface: Colors.white,
+                                ),
                               ),
-                            ),
-                            child: child!,
-                          );
-                        },
-                      ); 
-                      if (d!=null) setSb(()=> date=d); 
-                    }, 
-                    child: const Text('Pick date', style: TextStyle(color: Colors.green))
+                              child: child!,
+                            );
+                          },
+                        );
+                        if (d!=null) setSb(()=> date=d);
+                      },
+                      child: const Text('Pick date', style: TextStyle(color: Colors.green))
                   ),
                 ]),
               ],
@@ -816,16 +819,16 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: ()=> Navigator.pop(ctx, 'cancel'), 
-              child: const Text('Cancel', style: TextStyle(color: Colors.white70))
+                onPressed: ()=> Navigator.pop(ctx, 'cancel'),
+                child: const Text('Cancel', style: TextStyle(color: Colors.white70))
             ),
             TextButton(
-              onPressed: ()=> Navigator.pop(ctx, 'delete'), 
-              child: const Text('Delete', style: TextStyle(color: Colors.red))
+                onPressed: ()=> Navigator.pop(ctx, 'delete'),
+                child: const Text('Delete', style: TextStyle(color: Colors.red))
             ),
             TextButton(
-              onPressed: ()=> Navigator.pop(ctx, 'save'), 
-              child: const Text('Save', style: TextStyle(color: Colors.green))
+                onPressed: ()=> Navigator.pop(ctx, 'save'),
+                child: const Text('Save', style: TextStyle(color: Colors.green))
             ),
           ],
         );
@@ -850,12 +853,11 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     setState(() {
       _isLoading = true;
     });
-    
+
     try {
       await HybridStorageService.deleteTransactionById(transactionId);
       await _loadTransactionHistory();
     } catch (e) {
-      // Still refresh UI in case deletion partially succeeded
       await _loadTransactionHistory();
     }
   }
@@ -896,14 +898,14 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
         hintStyle: const TextStyle(color: Colors.white60),
         prefixIcon: const Icon(Icons.search, color: Colors.white70),
         filled: true,
-        fillColor: Colors.white.withOpacity(0.06),
+        fillColor: Colors.white.withValues(alpha: 0.05),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+          borderSide: const BorderSide(color: Colors.white24),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+          borderSide: const BorderSide(color: Colors.white24),
         ),
         focusedBorder: const OutlineInputBorder(
           borderRadius: BorderRadius.all(Radius.circular(12)),
@@ -945,7 +947,6 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     );
   }
 
-  /// Show PDF export options dialog
   Future<void> _showPdfExportDialog() async {
     DateTime? startDate;
     DateTime? endDate;
@@ -967,7 +968,6 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Date range selection
                   Text(
                     'Date Range',
                     style: GoogleFonts.openSans(
@@ -976,7 +976,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       Expanded(
@@ -986,14 +986,14 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                               context: ctx,
                               firstDate: DateTime(2020),
                               lastDate: DateTime.now(),
-                              initialDate: startDate ?? DateTime.now().subtract(Duration(days: 30)),
+                              initialDate: startDate ?? DateTime.now().subtract(const Duration(days: 30)),
                               builder: (context, child) {
                                 return Theme(
                                   data: Theme.of(context).copyWith(
-                                    colorScheme: ColorScheme.dark(
+                                    colorScheme: const ColorScheme.dark(
                                       primary: Colors.green,
                                       onPrimary: Colors.white,
-                                      surface: const Color(0xFF0E1F1F),
+                                      surface: Color(0xFF0E1F1F),
                                       onSurface: Colors.white,
                                     ),
                                   ),
@@ -1007,11 +1007,11 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                           },
                           child: Text(
                             startDate != null ? _formatDate(startDate!) : 'Start Date',
-                            style: TextStyle(color: Colors.green),
+                            style: const TextStyle(color: Colors.green),
                           ),
                         ),
                       ),
-                      Text(' to ', style: TextStyle(color: Colors.white70)),
+                      const Text(' to ', style: TextStyle(color: Colors.white70)),
                       Expanded(
                         child: TextButton(
                           onPressed: () async {
@@ -1023,10 +1023,10 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                               builder: (context, child) {
                                 return Theme(
                                   data: Theme.of(context).copyWith(
-                                    colorScheme: ColorScheme.dark(
+                                    colorScheme: const ColorScheme.dark(
                                       primary: Colors.green,
                                       onPrimary: Colors.white,
-                                      surface: const Color(0xFF0E1F1F),
+                                      surface: Color(0xFF0E1F1F),
                                       onSurface: Colors.white,
                                     ),
                                   ),
@@ -1040,28 +1040,27 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                           },
                           child: Text(
                             endDate != null ? _formatDate(endDate!) : 'End Date',
-                            style: TextStyle(color: Colors.green),
+                            style: const TextStyle(color: Colors.green),
                           ),
                         ),
                       ),
                     ],
                   ),
-                  SizedBox(height: 16),
-                  
-                  // Quick date range buttons
+                  const SizedBox(height: 16),
+
                   Wrap(
                     spacing: 8,
                     children: [
                       _buildQuickDateButton('Last 7 days', () {
                         setState(() {
                           endDate = DateTime.now();
-                          startDate = DateTime.now().subtract(Duration(days: 7));
+                          startDate = DateTime.now().subtract(const Duration(days: 7));
                         });
                       }),
                       _buildQuickDateButton('Last 30 days', () {
                         setState(() {
                           endDate = DateTime.now();
-                          startDate = DateTime.now().subtract(Duration(days: 30));
+                          startDate = DateTime.now().subtract(const Duration(days: 30));
                         });
                       }),
                       _buildQuickDateButton('All time', () {
@@ -1072,9 +1071,8 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                       }),
                     ],
                   ),
-                  SizedBox(height: 16),
-                  
-                  // Export options
+                  const SizedBox(height: 16),
+
                   Text(
                     'Export Options',
                     style: GoogleFonts.openSans(
@@ -1083,7 +1081,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   CheckboxListTile(
                     title: Text(
                       'Include Summary',
@@ -1110,15 +1108,11 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, 'cancel'),
-                child: Text('Cancel', style: TextStyle(color: Colors.white70)),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, 'preview'),
-                child: Text('Preview', style: TextStyle(color: Colors.blue)),
+                child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, 'export'),
-                child: Text('Export', style: TextStyle(color: Colors.green)),
+                child: const Text('Export', style: TextStyle(color: Colors.green)),
               ),
             ],
           );
@@ -1126,22 +1120,19 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
       ),
     );
 
-    if (result == 'preview') {
-      await _previewPdf(startDate, endDate, includeCharts, includeSummary);
-    } else if (result == 'export') {
+    if (result == 'export') {
       await _exportPdf(startDate, endDate, includeCharts, includeSummary);
     }
   }
 
-  /// Build quick date range button
   Widget _buildQuickDateButton(String label, VoidCallback onPressed) {
     return ElevatedButton(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.green.withOpacity(0.2),
+        backgroundColor: Colors.green.withValues(alpha: 0.2),
         foregroundColor: Colors.green,
-        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        minimumSize: Size(0, 32),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        minimumSize: const Size(0, 32),
       ),
       child: Text(
         label,
@@ -1150,128 +1141,29 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     );
   }
 
-  /// Preview PDF
-  Future<void> _previewPdf(DateTime? startDate, DateTime? endDate, bool includeCharts, bool includeSummary) async {
-    if (_isGeneratingPdf) return; // Prevent multiple generations
-    
-    if (mounted) {
-      setState(() {
-        _isGeneratingPdf = true;
-      });
-    }
-    
-    try {
-      // Show loading indicator
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => Center(
-          child: Container(
-            padding: EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Color(0xFF0E1F1F),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(color: Colors.green),
-                SizedBox(height: 16),
-                Text(
-                  'Generating PDF...',
-                  style: GoogleFonts.openSans(color: Colors.white),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-
-      // Filter transactions based on date range
-      List<Transaction> filteredTransactions = _cachedTransactions;
-      if (startDate != null || endDate != null) {
-        filteredTransactions = _cachedTransactions.where((transaction) {
-          if (startDate != null && transaction.date.isBefore(startDate)) {
-            return false;
-          }
-          if (endDate != null && transaction.date.isAfter(endDate)) {
-            return false;
-          }
-          return true;
-        }).toList();
-      }
-
-      // Generate PDF using free pdf package
-      print('=== PDF GENERATION START ===');
-      print('Start date: $startDate, End date: $endDate');
-      print('Filtered transactions count: ${filteredTransactions.length}');
-      
-      final pdfBytes = await PdfService.generateTransactionReport(
-        startDate: startDate,
-        endDate: endDate,
-        includeCharts: true,
-        includeSummary: true,
-      );
-      
-      print('PDF generation completed, bytes length: ${pdfBytes.length}');
-      print('=== PDF GENERATION END ===');
-
-      // Close loading dialog
-      if (mounted) {
-        Navigator.pop(context);
-      }
-
-      // Show export options dialog
-      await _showExportOptionsDialog(pdfBytes, startDate, endDate);
-    } catch (e) {
-      // Close loading dialog if still open
-      if (mounted) {
-        Navigator.pop(context);
-        
-        // Show error
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error generating PDF: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isGeneratingPdf = false;
-        });
-      }
-    }
-  }
-
-  /// Export PDF
   Future<void> _exportPdf(DateTime? startDate, DateTime? endDate, bool includeCharts, bool includeSummary) async {
-    if (_isGeneratingPdf) return; // Prevent multiple generations
-    
-    if (mounted) {
-      setState(() {
-        _isGeneratingPdf = true;
-      });
-    }
-    
+    if (_isGeneratingPdf) return;
+
+    setState(() {
+      _isGeneratingPdf = true;
+    });
+
     try {
-      // Show loading indicator
       showDialog(
         context: context,
         barrierDismissible: false,
         builder: (ctx) => Center(
           child: Container(
-            padding: EdgeInsets.all(20),
+            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Color(0xFF0E1F1F),
+              color: const Color(0xFF0E1F1F),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                CircularProgressIndicator(color: Colors.green),
-                SizedBox(height: 16),
+                const CircularProgressIndicator(color: Colors.green),
+                const SizedBox(height: 16),
                 Text(
                   'Generating PDF...',
                   style: GoogleFonts.openSans(color: Colors.white),
@@ -1282,48 +1174,21 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
         ),
       );
 
-      // Filter transactions based on date range
-      List<Transaction> filteredTransactions = _cachedTransactions;
-      if (startDate != null || endDate != null) {
-        filteredTransactions = _cachedTransactions.where((transaction) {
-          if (startDate != null && transaction.date.isBefore(startDate)) {
-            return false;
-          }
-          if (endDate != null && transaction.date.isAfter(endDate)) {
-            return false;
-          }
-          return true;
-        }).toList();
-      }
-
-      // Generate PDF using free pdf package
-      print('=== PDF GENERATION START ===');
-      print('Start date: $startDate, End date: $endDate');
-      print('Filtered transactions count: ${filteredTransactions.length}');
-      
       final pdfBytes = await PdfService.generateTransactionReport(
         startDate: startDate,
         endDate: endDate,
-        includeCharts: true,
-        includeSummary: true,
+        includeCharts: includeCharts,
+        includeSummary: includeSummary,
       );
-      
-      print('PDF generation completed, bytes length: ${pdfBytes.length}');
-      print('=== PDF GENERATION END ===');
 
-      // Close loading dialog
       if (mounted) {
         Navigator.pop(context);
       }
 
-      // Show export options
       await _showExportOptionsDialog(pdfBytes, startDate, endDate);
     } catch (e) {
-      // Close loading dialog if still open
       if (mounted) {
         Navigator.pop(context);
-        
-        // Show error
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error generating PDF: $e'),
@@ -1340,26 +1205,24 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     }
   }
 
-  /// Save PDF directly to device with confirmation
   Future<void> _showExportOptionsDialog(Uint8List pdfBytes, DateTime? startDate, DateTime? endDate) async {
     final fileName = _generateFileName(startDate, endDate);
-    
-    // Show loading dialog while saving
+
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => Center(
         child: Container(
-          padding: EdgeInsets.all(20),
+          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Color(0xFF0E1F1F),
+            color: const Color(0xFF0E1F1F),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircularProgressIndicator(color: Colors.green),
-              SizedBox(height: 16),
+              const CircularProgressIndicator(color: Colors.green),
+              const SizedBox(height: 16),
               Text(
                 'Saving PDF to device...',
                 style: GoogleFonts.openSans(color: Colors.white),
@@ -1371,20 +1234,14 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     );
 
     try {
-      print('=== PDF SAVE PROCESS START ===');
-      // Save PDF to device
       final filePath = await PdfService.savePdfToDevice(pdfBytes, fileName)
-          .timeout(Duration(seconds: 15));
-      print('PDF save completed, filePath: $filePath');
-      
-      // Close loading dialog
+          .timeout(const Duration(seconds: 15));
+
       if (mounted) {
         Navigator.pop(context);
-        print('Loading dialog closed');
       }
-      
+
       if (filePath != null && mounted) {
-        // Show success confirmation
         await showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -1392,8 +1249,8 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             title: Row(
               children: [
-                Icon(Icons.check_circle, color: Colors.green, size: 28),
-                SizedBox(width: 12),
+                const Icon(Icons.check_circle, color: Colors.green, size: 28),
+                const SizedBox(width: 12),
                 Text(
                   'PDF Saved!',
                   style: GoogleFonts.montserrat(color: Colors.white),
@@ -1404,64 +1261,28 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Your PDF has been saved successfully to your device.',
-                  style: GoogleFonts.openSans(color: Colors.white70),
+                  style: TextStyle(color: Colors.white70),
                 ),
-                SizedBox(height: 12),
-                Container(
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Color(0xFF1A2A2A),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.green.withOpacity(0.3)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'File Details:',
-                        style: GoogleFonts.openSans(
-                          color: Colors.green,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Name: $fileName.pdf',
-                        style: GoogleFonts.openSans(color: Colors.white70, fontSize: 12),
-                      ),
-                      Text(
-                        'Location: Documents folder',
-                        style: GoogleFonts.openSans(color: Colors.white70, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
+                const SizedBox(height: 12),
+                _buildFileDetails(fileName),
               ],
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: Text('OK', style: TextStyle(color: Colors.green)),
+                child: const Text('OK', style: TextStyle(color: Colors.green)),
               ),
             ],
           ),
         );
       } else {
-        throw Exception('Failed to save PDF - no file path returned');
+        throw Exception('Failed to save PDF');
       }
     } catch (e) {
-      print('=== PDF SAVE PROCESS ERROR ===');
-      print('Error: $e');
-      print('Error type: ${e.runtimeType}');
-      // Close loading dialog if still open
       if (mounted) {
         Navigator.pop(context);
-        print('Loading dialog closed due to error');
-        
-        // Show error dialog
         await showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -1469,8 +1290,8 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             title: Row(
               children: [
-                Icon(Icons.error, color: Colors.red, size: 28),
-                SizedBox(width: 12),
+                const Icon(Icons.error, color: Colors.red, size: 28),
+                const SizedBox(width: 12),
                 Text(
                   'Save Failed',
                   style: GoogleFonts.montserrat(color: Colors.white),
@@ -1478,13 +1299,13 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
               ],
             ),
             content: Text(
-              'Failed to save PDF: ${e.toString().split(':').last.trim()}',
-              style: GoogleFonts.openSans(color: Colors.white70),
+              'Failed to save PDF: $e',
+              style: const TextStyle(color: Colors.white70),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: Text('OK', style: TextStyle(color: Colors.red)),
+                child: const Text('OK', style: TextStyle(color: Colors.red)),
               ),
             ],
           ),
@@ -1493,8 +1314,39 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     }
   }
 
+  Widget _buildFileDetails(String fileName) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A2A2A),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'File Details:',
+            style: TextStyle(
+              color: Colors.green,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Name: $fileName.pdf',
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+          const Text(
+            'Location: Documents folder',
+            style: TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
 
-  /// Generate filename based on date range
   String _generateFileName(DateTime? startDate, DateTime? endDate) {
     final now = DateTime.now();
     if (startDate == null && endDate == null) {
@@ -1508,12 +1360,11 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     }
   }
 
-  /// Check if transaction is pending sync
   Future<bool> _checkIfTransactionPendingSync(String transactionId) async {
     try {
       final transactions = await HybridStorageService.getTransactions();
       final txn = transactions.firstWhere(
-        (t) => (t['transactionId'] ?? '').toString() == transactionId,
+            (t) => (t['transactionId'] ?? '').toString() == transactionId,
         orElse: () => <String, dynamic>{},
       );
       if (txn.isEmpty) return false;
@@ -1523,27 +1374,4 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
       return false;
     }
   }
-
-  /// Calculate summary statistics
-  Future<Map<String, double>> _calculateSummary(List<Transaction> transactions) async {
-    final totalCredits = transactions
-        .where((t) => t.type == 'Credit')
-        .fold(0.0, (sum, t) => sum + t.amount);
-    
-    final totalDebits = transactions
-        .where((t) => t.type == 'Debit')
-        .fold(0.0, (sum, t) => sum + t.amount);
-    
-    // Get initial balance and calculate actual balance
-    final initialBalance = await HybridStorageService.getInitialBalance();
-    final balance = initialBalance + totalCredits - totalDebits;
-    
-    return {
-      'credits': totalCredits,
-      'debits': totalDebits,
-      'balance': balance,
-    };
-  }
-
 }
-

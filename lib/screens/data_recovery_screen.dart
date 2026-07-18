@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../data_recovery_utility.dart';
-import '../services/hybrid_storage_service.dart';
 
 class DataRecoveryScreen extends StatefulWidget {
   const DataRecoveryScreen({super.key});
@@ -25,15 +24,17 @@ class _DataRecoveryScreenState extends State<DataRecoveryScreen> {
     setState(() => _isLoading = true);
     try {
       final sources = await DataRecoveryUtility.checkAllDataSources();
-      setState(() {
-        _dataSources = sources;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
       if (mounted) {
+        setState(() {
+          _dataSources = sources;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error checking data sources: $e')),
         );
@@ -63,7 +64,9 @@ class _DataRecoveryScreenState extends State<DataRecoveryScreen> {
         );
       }
     } finally {
-      setState(() => _isRecovering = false);
+      if (mounted) {
+        setState(() => _isRecovering = false);
+      }
     }
   }
 
@@ -93,6 +96,7 @@ class _DataRecoveryScreenState extends State<DataRecoveryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF032221),
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: Container(
@@ -118,6 +122,8 @@ class _DataRecoveryScreenState extends State<DataRecoveryScreen> {
         ),
       ),
       body: Container(
+        width: double.infinity,
+        height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -127,25 +133,28 @@ class _DataRecoveryScreenState extends State<DataRecoveryScreen> {
         ),
         child: _isLoading
             ? const Center(child: CircularProgressIndicator(color: Colors.white))
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeader(),
-                    const SizedBox(height: 20),
-                    if (_dataSources != null) ...[
-                      _buildDataSourceCard('Local Data', _dataSources!['local_data']),
-                      const SizedBox(height: 16),
-                      _buildDataSourceCard('Cloud Data', _dataSources!['cloud_data']),
-                      const SizedBox(height: 16),
-                      _buildDataSourceCard('Backup Data', _dataSources!['backup_data']),
-                      const SizedBox(height: 16),
-                      _buildDataSourceCard('Migration Status', _dataSources!['migration_status']),
-                      const SizedBox(height: 30),
-                      _buildActionButtons(),
+            : SafeArea(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(),
+                      const SizedBox(height: 20),
+                      if (_dataSources != null) ...[
+                        _buildDataSourceCard('Local Data', _dataSources!['local_data']),
+                        const SizedBox(height: 16),
+                        _buildDataSourceCard('Cloud Data', _dataSources!['cloud_data']),
+                        const SizedBox(height: 16),
+                        _buildDataSourceCard('Backup Data', _dataSources!['backup_data']),
+                        const SizedBox(height: 16),
+                        _buildDataSourceCard('Migration Status', _dataSources!['migration_status']),
+                        const SizedBox(height: 30),
+                        _buildActionButtons(),
+                        const SizedBox(height: 40),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
       ),
@@ -156,9 +165,9 @@ class _DataRecoveryScreenState extends State<DataRecoveryScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
+        color: Colors.white.withOpacity(0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.2)),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -255,16 +264,16 @@ class _DataRecoveryScreenState extends State<DataRecoveryScreen> {
                 ? const SizedBox(
                     width: 16,
                     height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
                 : const Icon(Icons.cloud_download),
             label: Text(_isRecovering ? 'Recovering...' : 'Attempt Recovery'),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 12),
+              padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
           ),
@@ -279,9 +288,9 @@ class _DataRecoveryScreenState extends State<DataRecoveryScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 12),
+              padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
           ),
@@ -296,9 +305,9 @@ class _DataRecoveryScreenState extends State<DataRecoveryScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 12),
+              padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
           ),
