@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/hybrid_storage_service.dart';
 import 'backup_management_screen.dart';
+import '../Auth_Gate.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -44,13 +45,112 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     try {
       await Supabase.instance.client.auth.signOut();
+      await HybridStorageService.clearLastOtpVerification();
       if (!context.mounted) return;
       // TODO: Replace '/login' with your actual login/entry route name.
-      Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const AuthGate()),
+            (route) => false,
+      );
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Logout failed: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _deleteAccount(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF0E1F1F),
+        title: Text('Delete account?', style: GoogleFonts.nunito(color: Colors.white)),
+        content: Text(
+          'This permanently deletes your account and all your data — categories, transactions, budgets, and OWO entries — from our servers. This cannot be undone.',
+          style: GoogleFonts.nunito(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Continue', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !context.mounted) return;
+
+    // Second, explicit confirmation since this is irreversible
+    final controller = TextEditingController();
+    final finalConfirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF0E1F1F),
+        title: Text('Type DELETE to confirm', style: GoogleFonts.nunito(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'DELETE',
+            hintStyle: TextStyle(color: Colors.white38),
+            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.red)),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim() == 'DELETE'),
+            child: const Text('Delete Forever', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (finalConfirm != true || !context.mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const Center(
+        child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.red)),
+      ),
+    );
+
+    try {
+      final client = Supabase.instance.client;
+      final userId = client.auth.currentUser?.id;
+      if (userId == null) throw Exception('No signed-in user found.');
+
+      // Single RPC call: deletes the user's rows in public tables AND
+      // the auth.users row itself, via a SECURITY DEFINER Postgres function.
+      // See the `delete_user_account` SQL function created in the Supabase SQL Editor.
+      await client.rpc('delete_user_account');
+
+      // Wipe local data
+      await HybridStorageService.saveCategories([]);
+      await HybridStorageService.saveTransactions([]);
+      await HybridStorageService.saveBudgets({});
+      await OwesOwnsStorage.saveOwoEntries([]);
+
+      // Clear the local session (refresh token is revoked immediately;
+      // the current access token is a self-verifying JWT so this also
+      // makes sure the client stops treating it as a valid session).
+      await client.auth.signOut();
+      await HybridStorageService.clearLastOtpVerification();
+
+      if (!context.mounted) return;
+      Navigator.pop(context); // close loading dialog
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const AuthGate()),
+            (route) => false,
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      Navigator.pop(context); // close loading dialog
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Account deletion failed: $e'), backgroundColor: Colors.red),
       );
     }
   }
@@ -276,7 +376,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const Divider(color: Colors.white24, height: 32),
               _tile(context, Icons.privacy_tip, 'Privacy Policy', (){ _openPrivacyPolicy(context); }),
-              _tile(context, Icons.logout, 'Log Out', (){ _logout(context); }, iconColor: Colors.red, titleColor: Colors.red),
+              _tile1(context, Icons.logout, 'Log Out', (){ _logout(context); }, iconColor: Colors.red, titleColor: Colors.red),
+              _tile1(context, Icons.delete_forever, 'Delete Account', (){ _deleteAccount(context); }, iconColor: Colors.red, titleColor: Colors.red),
               const SizedBox(height: 40),
             ],
           ),
@@ -355,6 +456,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: Text(title, style: GoogleFonts.nunito(color: titleColor, fontSize: 16)),
         trailing: const Icon(Icons.chevron_right, color: Colors.white70),
         onTap: onTap,
+      ),
+    );
+  }
+
+  Widget _tile1(
+      BuildContext context,
+      IconData icon,
+      String title,
+      VoidCallback onTap, {
+        Color iconColor = Colors.green,
+        Color titleColor = Colors.white,
+      }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: iconColor),
+              const SizedBox(width: 10),
+              Text(title, style: GoogleFonts.nunito(color: titleColor, fontSize: 16)),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'SignUpPage.dart';
 import 'HomePage.dart';
 import 'OTPverification.dart';
 import 'VaulticLogin.dart';
 import 'services/hybrid_storage_service.dart';
+import '../screens/branded_background.dart';
 
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
@@ -32,20 +34,67 @@ class AuthGate extends StatelessWidget {
     return const SignUpPage();
   }
 
+  Widget _brandedLoadingScreen() {
+    return Scaffold(
+      backgroundColor: const Color(0xFF032221),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF032221),
+              Color(0xFF0D635F),
+              Color(0xFF032221),
+            ],
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'Vaultic',
+                style: GoogleFonts.montserrat(
+                  letterSpacing: 4,
+                  color: Colors.white,
+                  fontSize: 70,
+                ),
+              ),
+              Text(
+                'Your Smart Vault',
+                style: GoogleFonts.openSans(
+                  color: Colors.white,
+                  fontSize: 17,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<Widget>(
       future: _getHomeWidget(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+          return const BrandedBackground();
         }
 
         if (snapshot.hasError) {
-          return const Scaffold(
-            body: Center(child: Text('An error occurred')),
+          return Scaffold(
+            backgroundColor: const Color(0xFF032221),
+            body: const Center(
+              child: Text(
+                'An error occurred',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
           );
         }
 

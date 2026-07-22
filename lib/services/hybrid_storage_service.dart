@@ -264,6 +264,11 @@ class HybridStorageService {
     return DateTime.tryParse(raw);
   }
 
+  static Future<void> clearLastOtpVerification() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_lastOtpVerifyKey);
+  }
+
   static Future<double> getInitialBalance() async {
     if (_isAuthenticated) {
       try {

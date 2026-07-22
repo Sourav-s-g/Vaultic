@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'VaulticLogin.dart';
 import 'Auth_Gate.dart';
+import '../screens/branded_background.dart';
 import 'services/hybrid_storage_service.dart';
 import 'services/credential_service.dart';
 
@@ -12,7 +13,7 @@ void main() async {
   try {
     // Initialize secure credential service
     await CredentialService.initialize();
-    
+
     // Validate credentials
     if (!CredentialService.validateCredentials()) {
       throw Exception(CredentialService.getValidationError());
@@ -28,7 +29,7 @@ void main() async {
   } catch (e) {
     // Handle credential initialization errors
     print('Failed to initialize app: $e');
-    
+
     // Show error screen instead of crashing
     runApp(ErrorApp(error: e.toString()));
   }
@@ -37,7 +38,7 @@ void main() async {
 /// Error app shown when credential initialization fails
 class ErrorApp extends StatelessWidget {
   final String error;
-  
+
   const ErrorApp({super.key, required this.error});
 
   @override
@@ -111,7 +112,7 @@ class VaulticApp extends StatelessWidget {
           ThemeData.dark().textTheme,
         ),
       ),
-      home: const Vaultic(), 
+      home: const Vaultic(),
       debugShowCheckedModeBanner: false,
     );
   }
@@ -137,7 +138,7 @@ class _VaulticState extends State<Vaultic> {
 
   Future<void> _initializeApp() async {
     final startTime = DateTime.now();
-    
+
     try {
       setState(() {
         _loadingMessage = 'Loading data...';
@@ -146,21 +147,21 @@ class _VaulticState extends State<Vaultic> {
 
       // Load all backend data
       await _loadBackendData();
-      
+
       // Process monthly rollover on app startup
       try {
         await HybridStorageService.processMonthlyRollover();
       } catch (e) {
         print('Monthly rollover processing failed: $e');
       }
-      
+
       // Check and perform auto-backup if enabled
       try {
         await HybridStorageService.checkAndPerformAutoBackup();
       } catch (e) {
         print('Auto-backup check failed: $e');
       }
-      
+
       // Process sync queue on app startup
       try {
         await HybridStorageService.processSyncQueue();
@@ -176,12 +177,12 @@ class _VaulticState extends State<Vaultic> {
       // Calculate minimum time (3 seconds)
       final elapsed = DateTime.now().difference(startTime);
       final remainingTime = const Duration(seconds: 3) - elapsed;
-      
+
       if (remainingTime.inMilliseconds > 0) {
         // Animate progress bar to completion during remaining time
         const progressSteps = 20;
         final stepDuration = remainingTime.inMilliseconds ~/ progressSteps;
-        
+
         for (int i = 0; i < progressSteps; i++) {
           await Future.delayed(Duration(milliseconds: stepDuration));
           if (mounted) {
@@ -208,17 +209,17 @@ class _VaulticState extends State<Vaultic> {
       // Even if there's an error, ensure minimum time and proceed
       final elapsed = DateTime.now().difference(startTime);
       final remainingTime = const Duration(seconds: 3) - elapsed;
-      
+
       if (remainingTime.inMilliseconds > 0) {
         setState(() {
           _progress = 0.8;
           _loadingMessage = 'Preparing app...';
         });
-        
+
         // Animate progress bar to completion during remaining time
         const progressSteps = 20;
         final stepDuration = remainingTime.inMilliseconds ~/ progressSteps;
-        
+
         for (int i = 0; i < progressSteps; i++) {
           await Future.delayed(Duration(milliseconds: stepDuration));
           if (mounted) {
@@ -233,7 +234,7 @@ class _VaulticState extends State<Vaultic> {
         setState(() {
           _isLoading = false;
         });
-        
+
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const AuthGate()),
@@ -247,13 +248,13 @@ class _VaulticState extends State<Vaultic> {
       // Check if user is authenticated
       final session = Supabase.instance.client.auth.currentSession;
       final user = session?.user;
-      
+
       if (user != null) {
         setState(() {
           _loadingMessage = 'Syncing data...';
           _progress = 0.4;
         });
-        
+
         // Sync data from backend
         await HybridStorageService.syncOnLogin();
       } else {
@@ -261,7 +262,7 @@ class _VaulticState extends State<Vaultic> {
           _loadingMessage = 'Preparing app...';
           _progress = 0.4;
         });
-        
+
         // Load local data for offline mode
         await Future.wait([
           HybridStorageService.getCategories(),
@@ -270,7 +271,7 @@ class _VaulticState extends State<Vaultic> {
           HybridStorageService.getOwoEntries(),
         ]);
       }
-      
+
       setState(() {
         _loadingMessage = 'Ready!';
         _progress = 0.8;
@@ -282,14 +283,14 @@ class _VaulticState extends State<Vaultic> {
         _loadingMessage = 'Loading offline data...';
         _progress = 0.4;
       });
-      
+
       await Future.wait([
         HybridStorageService.getCategories(),
         HybridStorageService.getTransactions(),
         HybridStorageService.getBudgets(),
         HybridStorageService.getOwoEntries(),
       ]);
-      
+
       setState(() {
         _progress = 0.8;
       });
@@ -298,92 +299,42 @@ class _VaulticState extends State<Vaultic> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF032221),
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF032221),
-              Color(0xFF0D635F),
-              Color(0xFF032221),
-            ],
-          ),
-        ),
-        child: Stack(
-          children: [
-            // Brand centered on screen
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Vaultic',
-                    style: GoogleFonts.montserrat(
-                      letterSpacing: 4,
-                      color: Colors.white,
-                      fontSize: 70,
-                    ),
-                  ),
-                  Text(
-                    'Your Smart Vault',
-                    style: GoogleFonts.openSans(
-                      color: Colors.white,
-                      fontSize: 17,
-                    ),
-                  ),
-                ],
-              ),
+    return BrandedBackground(
+      bottomContent: _isLoading
+          ? Column(
+        children: [
+          Container(
+            width: double.infinity,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(2),
             ),
-            
-            // Progress bar at bottom
-            if (_isLoading)
-              Positioned(
-                bottom: MediaQuery.of(context).size.height * 0.1,
-                left: 40,
-                right: 40,
-                child: Column(
-                  children: [
-                    // Progress bar
-                    Container(
-                      width: double.infinity,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                      child: Stack(
-                        children: [
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 300),
-                            width: (MediaQuery.of(context).size.width - 80) * _progress,
-                            height: 4,
-                            decoration: BoxDecoration(
-                              color: Colors.green,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      _loadingMessage,
-                      style: GoogleFonts.openSans(
-                        color: Colors.white70,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ],
+            child: Stack(
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  width: (MediaQuery.of(context).size.width - 80) * _progress,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
-              ),
-          ],
-        ),
-      ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            _loadingMessage,
+            style: GoogleFonts.openSans(
+              color: Colors.white70,
+              fontSize: 16,
+            ),
+          ),
+        ],
+      )
+          : null,
     );
   }
 }
