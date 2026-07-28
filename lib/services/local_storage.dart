@@ -4,11 +4,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 class HybridStorageService {
   static const String _categoriesKey = 'vaultic_categories_v1';
   static const String _transactionsKey = 'vaultic_transactions_v1';
-  static const String _transactionsByMonthPrefix = 'vaultic_txns_month_'; // + YYYY-MM
-  static const String _txIdToMonthIndexKey = 'vaultic_txn_index_v1'; // {id: 'YYYY-MM'}
+  static const String _transactionsByMonthPrefix =
+      'vaultic_txns_month_'; // + YYYY-MM
+  static const String _txIdToMonthIndexKey =
+      'vaultic_txn_index_v1'; // {id: 'YYYY-MM'}
   static const String _budgetsKey = 'vaultic_budgets_v1'; // {category: double}
   static const String _owoKey = 'vaultic_owo_v1';
-  static const String _lastOtpVerifyKey = 'vaultic_last_otp_verify_at_v1';
 
   // Categories
   static Future<List<Map<String, dynamic>>> getCategories() async {
@@ -22,7 +23,9 @@ class HybridStorageService {
     return [];
   }
 
-  static Future<void> saveCategories(List<Map<String, dynamic>> categories) async {
+  static Future<void> saveCategories(
+    List<Map<String, dynamic>> categories,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_categoriesKey, jsonEncode(categories));
   }
@@ -50,7 +53,11 @@ class HybridStorageService {
   static Future<List<Map<String, dynamic>>> getTransactions() async {
     final prefs = await SharedPreferences.getInstance();
     await _migrateLegacyTransactionsIfNeeded(prefs);
-    final keys = prefs.getKeys().where((k) => k.startsWith(_transactionsByMonthPrefix)).toList();
+    final keys =
+        prefs
+            .getKeys()
+            .where((k) => k.startsWith(_transactionsByMonthPrefix))
+            .toList();
     final result = <Map<String, dynamic>>[];
     for (final k in keys) {
       final raw = prefs.getString(k);
@@ -61,19 +68,24 @@ class HybridStorageService {
     return result;
   }
 
-  static Future<void> saveTransactions(List<Map<String, dynamic>> transactions) async {
+  static Future<void> saveTransactions(
+    List<Map<String, dynamic>> transactions,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final monthToList = <String, List<Map<String, dynamic>>>{};
     final idToMonth = <String, String>{};
     for (final t in transactions) {
-      final dt = DateTime.tryParse((t['date'] ?? '').toString()) ?? DateTime.now();
+      final dt =
+          DateTime.tryParse((t['date'] ?? '').toString()) ?? DateTime.now();
       final month = _formatMonthKey(dt);
       final id = (t['transactionId'] ?? '').toString();
       monthToList.putIfAbsent(month, () => <Map<String, dynamic>>[]).add(t);
       if (id.isNotEmpty) idToMonth[id] = month;
     }
     // Clear old monthly buckets
-    for (final k in prefs.getKeys().where((k) => k.startsWith(_transactionsByMonthPrefix))) {
+    for (final k in prefs.getKeys().where(
+      (k) => k.startsWith(_transactionsByMonthPrefix),
+    )) {
       await prefs.remove(k);
     }
     // Write new
@@ -87,7 +99,8 @@ class HybridStorageService {
   static Future<void> addTransaction(Map<String, dynamic> txn) async {
     final prefs = await SharedPreferences.getInstance();
     await _migrateLegacyTransactionsIfNeeded(prefs);
-    final dt = DateTime.tryParse((txn['date'] ?? '').toString()) ?? DateTime.now();
+    final dt =
+        DateTime.tryParse((txn['date'] ?? '').toString()) ?? DateTime.now();
     final month = _formatMonthKey(dt);
     final key = _monthBucketKey(month);
     final list = await _readBucket(prefs, key);
@@ -101,7 +114,10 @@ class HybridStorageService {
     }
   }
 
-  static Future<void> updateTransactionById(String transactionId, Map<String, dynamic> updatedFields) async {
+  static Future<void> updateTransactionById(
+    String transactionId,
+    Map<String, dynamic> updatedFields,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     await _migrateLegacyTransactionsIfNeeded(prefs);
     final index = await _readIndex(prefs);
@@ -109,11 +125,14 @@ class HybridStorageService {
     if (currentMonth == null) return;
     final currentKey = _monthBucketKey(currentMonth);
     var list = await _readBucket(prefs, currentKey);
-    final idx = list.indexWhere((t) => (t['transactionId'] ?? '').toString() == transactionId);
+    final idx = list.indexWhere(
+      (t) => (t['transactionId'] ?? '').toString() == transactionId,
+    );
     if (idx == -1) return;
     final original = Map<String, dynamic>.from(list[idx]);
     final merged = original..addAll(updatedFields);
-    final newDt = DateTime.tryParse((merged['date'] ?? '').toString()) ?? DateTime.now();
+    final newDt =
+        DateTime.tryParse((merged['date'] ?? '').toString()) ?? DateTime.now();
     final newMonth = _formatMonthKey(newDt);
     if (newMonth != currentMonth) {
       list.removeAt(idx);
@@ -139,7 +158,9 @@ class HybridStorageService {
     if (month == null) return;
     final key = _monthBucketKey(month);
     final list = await _readBucket(prefs, key);
-    list.removeWhere((t) => (t['transactionId'] ?? '').toString() == transactionId);
+    list.removeWhere(
+      (t) => (t['transactionId'] ?? '').toString() == transactionId,
+    );
     await prefs.setString(key, jsonEncode(list));
     index.remove(transactionId);
     await _writeIndex(prefs, index);
@@ -152,7 +173,12 @@ class HybridStorageService {
     if (raw == null || raw.isEmpty) return {};
     final decoded = jsonDecode(raw);
     if (decoded is Map<String, dynamic>) {
-      return decoded.map((k, v) => MapEntry(k, (v is num) ? v.toDouble() : double.tryParse(v.toString()) ?? 0.0));
+      return decoded.map(
+        (k, v) => MapEntry(
+          k,
+          (v is num) ? v.toDouble() : double.tryParse(v.toString()) ?? 0.0,
+        ),
+      );
     }
     return {};
   }
@@ -174,27 +200,18 @@ class HybridStorageService {
     await saveBudgets(budgets);
   }
 
-  // OTP Verification timestamp
-  static Future<void> setLastOtpVerification(DateTime when) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_lastOtpVerifyKey, when.toIso8601String());
-  }
-
-  static Future<DateTime?> getLastOtpVerification() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_lastOtpVerifyKey);
-    if (raw == null || raw.isEmpty) return null;
-    return DateTime.tryParse(raw);
-  }
-
   // --------- Internal helpers for month-bucketed transactions ---------
   static String _formatMonthKey(DateTime dt) {
     return '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
   }
 
-  static String _monthBucketKey(String monthKey) => '${_transactionsByMonthPrefix}$monthKey';
+  static String _monthBucketKey(String monthKey) =>
+      '${_transactionsByMonthPrefix}$monthKey';
 
-  static Future<List<Map<String, dynamic>>> _readBucket(SharedPreferences prefs, String key) async {
+  static Future<List<Map<String, dynamic>>> _readBucket(
+    SharedPreferences prefs,
+    String key,
+  ) async {
     final raw = prefs.getString(key);
     if (raw == null || raw.isEmpty) return <Map<String, dynamic>>[];
     final decoded = jsonDecode(raw);
@@ -212,14 +229,21 @@ class HybridStorageService {
     return <String, String>{};
   }
 
-  static Future<void> _writeIndex(SharedPreferences prefs, Map<String, String> index) async {
+  static Future<void> _writeIndex(
+    SharedPreferences prefs,
+    Map<String, String> index,
+  ) async {
     await prefs.setString(_txIdToMonthIndexKey, jsonEncode(index));
   }
 
-  static Future<void> _migrateLegacyTransactionsIfNeeded(SharedPreferences prefs) async {
+  static Future<void> _migrateLegacyTransactionsIfNeeded(
+    SharedPreferences prefs,
+  ) async {
     // If legacy blob exists and no monthly buckets yet, migrate
     final legacy = prefs.getString(_transactionsKey);
-    final hasBuckets = prefs.getKeys().any((k) => k.startsWith(_transactionsByMonthPrefix));
+    final hasBuckets = prefs.getKeys().any(
+      (k) => k.startsWith(_transactionsByMonthPrefix),
+    );
     if (legacy == null || legacy.isEmpty || hasBuckets) return;
     final decoded = jsonDecode(legacy);
     if (decoded is! List) return;
@@ -266,5 +290,3 @@ extension OwesOwnsStorage on HybridStorageService {
     await saveOwoEntries(list);
   }
 }
-
-

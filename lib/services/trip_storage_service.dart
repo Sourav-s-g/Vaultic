@@ -18,7 +18,7 @@ class TripStorageService {
     final prefs = await SharedPreferences.getInstance();
     final tripsJson = prefs.getString(_tripsKey);
     if (tripsJson == null) return [];
-    
+
     final List<dynamic> tripsList = jsonDecode(tripsJson);
     return tripsList.map((tripMap) => Trip.fromMap(tripMap)).toList();
   }
@@ -35,7 +35,7 @@ class TripStorageService {
     final trips = await getTrips();
     trips.removeWhere((trip) => trip.tripId == tripId);
     await saveTrips(trips);
-    
+
     // Also delete trip transactions
     await deleteTripTransactions(tripId);
   }
@@ -51,36 +51,48 @@ class TripStorageService {
   }
 
   // Save trip transactions
-  static Future<void> saveTripTransactions(String tripId, List<Map<String, dynamic>> transactions) async {
+  static Future<void> saveTripTransactions(
+    String tripId,
+    List<Map<String, dynamic>> transactions,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final key = '${_tripTransactionsKey}_$tripId';
     await prefs.setString(key, jsonEncode(transactions));
   }
 
   // Get trip transactions
-  static Future<List<Map<String, dynamic>>> getTripTransactions(String tripId) async {
+  static Future<List<Map<String, dynamic>>> getTripTransactions(
+    String tripId,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final key = '${_tripTransactionsKey}_$tripId';
     final transactionsJson = prefs.getString(key);
     if (transactionsJson == null) return [];
-    
+
     final List<dynamic> transactionsList = jsonDecode(transactionsJson);
     return transactionsList.cast<Map<String, dynamic>>();
   }
 
   // Add trip transaction
-  static Future<void> addTripTransaction(String tripId, Map<String, dynamic> transaction) async {
+  static Future<void> addTripTransaction(
+    String tripId,
+    Map<String, dynamic> transaction,
+  ) async {
     final transactions = await getTripTransactions(tripId);
     transactions.add(transaction);
     await saveTripTransactions(tripId, transactions);
   }
 
   // Delete trip transaction
-  static Future<void> deleteTripTransaction(String tripId, String transactionId) async {
+  static Future<void> deleteTripTransaction(
+    String tripId,
+    String transactionId,
+  ) async {
     final transactions = await getTripTransactions(tripId);
-    transactions.removeWhere((t) => 
-      (t['transactionId'] ?? '').toString() == transactionId ||
-      (t['transaction_id'] ?? '').toString() == transactionId
+    transactions.removeWhere(
+      (t) =>
+          (t['transactionId'] ?? '').toString() == transactionId ||
+          (t['transaction_id'] ?? '').toString() == transactionId,
     );
     await saveTripTransactions(tripId, transactions);
   }
@@ -90,5 +102,13 @@ class TripStorageService {
     final prefs = await SharedPreferences.getInstance();
     final key = '${_tripTransactionsKey}_$tripId';
     await prefs.remove(key);
+  }
+
+  static Future<void> clearLocalData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final keys = prefs.getKeys().where(
+      (key) => key == _tripsKey || key.startsWith('${_tripTransactionsKey}_'),
+    );
+    await Future.wait(keys.map(prefs.remove));
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../Auth_Service.dart';
 import '../services/hybrid_storage_service.dart';
 import 'backup_management_screen.dart';
 import '../Auth_Gate.dart';
@@ -16,14 +17,17 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _profileExpanded = false;
 
-  static const String _privacyPolicyUrl = 'https://sourav-s-g.github.io/Vaultic/';
+  static const String _privacyPolicyUrl =
+      'https://sourav-s-g.github.io/Vaultic/';
 
   Future<void> _openPrivacyPolicy(BuildContext context) async {
     final uri = Uri.parse(_privacyPolicyUrl);
     final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!launched && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open the privacy policy link.')),
+        const SnackBar(
+          content: Text('Could not open the privacy policy link.'),
+        ),
       );
     }
   }
@@ -31,31 +35,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _logout(BuildContext context) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx)=> AlertDialog(
-        backgroundColor: const Color(0xFF0E1F1F),
-        title: Text('Log out?', style: GoogleFonts.nunito(color: Colors.white)),
-        content: Text('You will need to sign in again with an OTP to continue using Vaultic.', style: GoogleFonts.nunito(color: Colors.white70)),
-        actions: [
-          TextButton(onPressed: ()=> Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: ()=> Navigator.pop(ctx, true), child: const Text('Log Out', style: TextStyle(color: Colors.red))),
-        ],
-      ),
+      builder:
+          (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF0E1F1F),
+            title: Text(
+              'Log out?',
+              style: GoogleFonts.nunito(color: Colors.white),
+            ),
+            content: Text(
+              'You will need to sign in with your email and password to continue using Vaultic.',
+              style: GoogleFonts.nunito(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text(
+                  'Log Out',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
+          ),
     );
     if (confirm != true) return;
 
     try {
-      await Supabase.instance.client.auth.signOut();
-      await HybridStorageService.clearLastOtpVerification();
+      await AuthService().signOut();
       if (!context.mounted) return;
       // TODO: Replace '/login' with your actual login/entry route name.
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const AuthGate()),
-            (route) => false,
+        (route) => false,
       );
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Logout failed: $e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text('Logout failed: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -63,21 +85,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _deleteAccount(BuildContext context) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF0E1F1F),
-        title: Text('Delete account?', style: GoogleFonts.nunito(color: Colors.white)),
-        content: Text(
-          'This permanently deletes your account and all your data — categories, transactions, budgets, and OWO entries — from our servers. This cannot be undone.',
-          style: GoogleFonts.nunito(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Continue', style: TextStyle(color: Colors.red)),
+      builder:
+          (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF0E1F1F),
+            title: Text(
+              'Delete account?',
+              style: GoogleFonts.nunito(color: Colors.white),
+            ),
+            content: Text(
+              'This permanently deletes your account and all your data — categories, transactions, budgets, and OWO entries — from our servers. This cannot be undone.',
+              style: GoogleFonts.nunito(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text(
+                  'Continue',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
     );
     if (confirm != true || !context.mounted) return;
 
@@ -85,37 +117,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final controller = TextEditingController();
     final finalConfirm = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF0E1F1F),
-        title: Text('Type DELETE to confirm', style: GoogleFonts.nunito(color: Colors.white)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: 'DELETE',
-            hintStyle: TextStyle(color: Colors.white38),
-            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.red)),
+      builder:
+          (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF0E1F1F),
+            title: Text(
+              'Type DELETE to confirm',
+              style: GoogleFonts.nunito(color: Colors.white),
+            ),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                hintText: 'DELETE',
+                hintStyle: TextStyle(color: Colors.white38),
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: Colors.white24),
+                ),
+                focusedBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: Colors.red),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed:
+                    () =>
+                        Navigator.pop(ctx, controller.text.trim() == 'DELETE'),
+                child: const Text(
+                  'Delete Forever',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
           ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim() == 'DELETE'),
-            child: const Text('Delete Forever', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
     );
     if (finalConfirm != true || !context.mounted) return;
 
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const Center(
-        child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.red)),
-      ),
+      builder:
+          (ctx) => const Center(
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
+            ),
+          ),
     );
 
     try {
@@ -137,20 +188,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // Clear the local session (refresh token is revoked immediately;
       // the current access token is a self-verifying JWT so this also
       // makes sure the client stops treating it as a valid session).
-      await client.auth.signOut();
-      await HybridStorageService.clearLastOtpVerification();
+      await AuthService().signOut();
 
       if (!context.mounted) return;
       Navigator.pop(context); // close loading dialog
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const AuthGate()),
-            (route) => false,
+        (route) => false,
       );
     } catch (e) {
       if (!context.mounted) return;
       Navigator.pop(context); // close loading dialog
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Account deletion failed: $e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text('Account deletion failed: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -158,45 +211,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _clearLocalData(BuildContext context) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx)=> AlertDialog(
-        backgroundColor: const Color(0xFF0E1F1F),
-        title: Text('Clear all local data?', style: GoogleFonts.nunito(color: Colors.white)),
-        content: Text('This will delete your categories, transactions, budgets and OWO entries from this device.', style: GoogleFonts.nunito(color: Colors.white70)),
-        actions: [
-          TextButton(onPressed: ()=> Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: ()=> Navigator.pop(ctx, true), child: const Text('Clear', style: TextStyle(color: Colors.red))),
-        ],
-      ),
+      builder:
+          (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF0E1F1F),
+            title: Text(
+              'Clear all local data?',
+              style: GoogleFonts.nunito(color: Colors.white),
+            ),
+            content: Text(
+              'This will delete your categories, transactions, budgets and OWO entries from this device.',
+              style: GoogleFonts.nunito(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Clear', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
     );
     if (confirm != true) return;
 
-    // Backup current data for undo
-    final categoriesBackup = await HybridStorageService.getCategories();
-    final transactionsBackup = await HybridStorageService.getTransactions();
-    final budgetsBackup = await HybridStorageService.getBudgets();
-    final owoBackup = await OwesOwnsStorage.getOwoEntries();
-
-    // Clear
-    await HybridStorageService.saveCategories([]);
-    await HybridStorageService.saveTransactions([]);
-    await HybridStorageService.saveBudgets({});
-    await OwesOwnsStorage.saveOwoEntries([]);
+    await HybridStorageService.clearLocalCache();
 
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Local data cleared'),
-        action: SnackBarAction(
-          label: 'UNDO',
-          onPressed: () async {
-            await HybridStorageService.saveCategories(categoriesBackup);
-            await HybridStorageService.saveTransactions(transactionsBackup);
-            await HybridStorageService.saveBudgets(budgetsBackup);
-            await OwesOwnsStorage.saveOwoEntries(owoBackup);
-          },
-          textColor: Colors.yellow,
+        content: const Text(
+          'Local cache cleared. Your cloud data will reload when needed.',
         ),
-        duration: const Duration(seconds: 30),
       ),
     );
   }
@@ -204,15 +251,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _recoverFromCloud(BuildContext context) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx)=> AlertDialog(
-        backgroundColor: const Color(0xFF0E1F1F),
-        title: Text('Recover from Cloud?', style: GoogleFonts.nunito(color: Colors.white)),
-        content: Text('This will download all your data from the cloud and replace your local data.', style: GoogleFonts.nunito(color: Colors.white70)),
-        actions: [
-          TextButton(onPressed: ()=> Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: ()=> Navigator.pop(ctx, true), child: const Text('Recover', style: TextStyle(color: Colors.green))),
-        ],
-      ),
+      builder:
+          (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF0E1F1F),
+            title: Text(
+              'Recover from Cloud?',
+              style: GoogleFonts.nunito(color: Colors.white),
+            ),
+            content: Text(
+              'This will download all your data from the cloud and replace your local data.',
+              style: GoogleFonts.nunito(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text(
+                  'Recover',
+                  style: TextStyle(color: Colors.green),
+                ),
+              ),
+            ],
+          ),
     );
     if (confirm != true) return;
 
@@ -222,7 +285,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(success ? 'Data recovered successfully!' : 'Recovery failed. Check your internet connection.'),
+          content: Text(
+            success
+                ? 'Data recovered successfully!'
+                : 'Recovery failed. Check your internet connection.',
+          ),
           backgroundColor: success ? Colors.green : Colors.red,
         ),
       );
@@ -240,15 +307,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _restoreFromBackup(BuildContext context) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx)=> AlertDialog(
-        backgroundColor: const Color(0xFF0E1F1F),
-        title: Text('Restore from Backup?', style: GoogleFonts.nunito(color: Colors.white)),
-        content: Text('This will restore your data from the last backup. Current data will be replaced.', style: GoogleFonts.nunito(color: Colors.white70)),
-        actions: [
-          TextButton(onPressed: ()=> Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: ()=> Navigator.pop(ctx, true), child: const Text('Restore', style: TextStyle(color: Colors.orange))),
-        ],
-      ),
+      builder:
+          (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF0E1F1F),
+            title: Text(
+              'Restore from Backup?',
+              style: GoogleFonts.nunito(color: Colors.white),
+            ),
+            content: Text(
+              'This will restore your data from the last backup. Current data will be replaced.',
+              style: GoogleFonts.nunito(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text(
+                  'Restore',
+                  style: TextStyle(color: Colors.orange),
+                ),
+              ),
+            ],
+          ),
     );
     if (confirm != true) return;
 
@@ -258,7 +341,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(success ? 'Data restored from backup!' : 'No backup found or restore failed.'),
+          content: Text(
+            success
+                ? 'Data restored from backup!'
+                : 'No backup found or restore failed.',
+          ),
           backgroundColor: success ? Colors.green : Colors.red,
         ),
       );
@@ -277,11 +364,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
-        ),
-      ),
+      builder:
+          (ctx) => const Center(
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
+            ),
+          ),
     );
 
     try {
@@ -311,10 +399,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       Navigator.pop(context);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Sync failed: $e'),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text('Sync failed: $e'), backgroundColor: Colors.red),
       );
     }
   }
@@ -334,7 +419,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           child: AppBar(
-            title: Text('Settings', style: GoogleFonts.nunito(color: Colors.white, fontWeight: FontWeight.w600)),
+            title: Text(
+              'Settings',
+              style: GoogleFonts.nunito(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             backgroundColor: Colors.transparent,
             elevation: 0,
             iconTheme: const IconThemeData(color: Colors.white),
@@ -356,8 +447,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               _profileTile(context),
-              _tile(context, Icons.backup, 'Backup Management', (){
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const BackupManagementScreen()));
+              _tile(context, Icons.backup, 'Backup Management', () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const BackupManagementScreen(),
+                  ),
+                );
               }),
               const SizedBox(height: 4),
               GridView.count(
@@ -368,16 +464,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 crossAxisSpacing: 12,
                 childAspectRatio: 1.3,
                 children: [
-                  _gridTile(context, Icons.delete_forever, 'Clear Local Data', (){ _clearLocalData(context); }),
-                  _gridTile(context, Icons.cloud_download, 'Recover from Cloud', (){ _recoverFromCloud(context); }),
-                  _gridTile(context, Icons.cloud_sync, 'Sync Now', (){ _syncNow(context); }),
-                  _gridTile(context, Icons.restore, 'Restore from Backup', (){ _restoreFromBackup(context); }),
+                  _gridTile(
+                    context,
+                    Icons.delete_forever,
+                    'Clear Local Data',
+                    () {
+                      _clearLocalData(context);
+                    },
+                  ),
+                  _gridTile(
+                    context,
+                    Icons.cloud_download,
+                    'Recover from Cloud',
+                    () {
+                      _recoverFromCloud(context);
+                    },
+                  ),
+                  _gridTile(context, Icons.cloud_sync, 'Sync Now', () {
+                    _syncNow(context);
+                  }),
+                  _gridTile(context, Icons.restore, 'Restore from Backup', () {
+                    _restoreFromBackup(context);
+                  }),
                 ],
               ),
               const Divider(color: Colors.white24, height: 32),
-              _tile(context, Icons.privacy_tip, 'Privacy Policy', (){ _openPrivacyPolicy(context); }),
-              _tile1(context, Icons.logout, 'Log Out', (){ _logout(context); }, iconColor: Colors.red, titleColor: Colors.red),
-              _tile1(context, Icons.delete_forever, 'Delete Account', (){ _deleteAccount(context); }, iconColor: Colors.red, titleColor: Colors.red),
+              _tile(context, Icons.privacy_tip, 'Privacy Policy', () {
+                _openPrivacyPolicy(context);
+              }),
+              _tile1(
+                context,
+                Icons.logout,
+                'Log Out',
+                () {
+                  _logout(context);
+                },
+                iconColor: Colors.red,
+                titleColor: Colors.red,
+              ),
+              _tile1(
+                context,
+                Icons.delete_forever,
+                'Delete Account',
+                () {
+                  _deleteAccount(context);
+                },
+                iconColor: Colors.red,
+                titleColor: Colors.red,
+              ),
               const SizedBox(height: 40),
             ],
           ),
@@ -387,7 +521,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _profileTile(BuildContext context) {
-    final email = Supabase.instance.client.auth.currentUser?.email ?? 'Not signed in';
+    final email =
+        Supabase.instance.client.auth.currentUser?.email ?? 'Not signed in';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -400,14 +535,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           ListTile(
             leading: const Icon(Icons.person, color: Colors.green),
-            title: Text('Profile', style: GoogleFonts.nunito(color: Colors.white, fontSize: 16)),
+            title: Text(
+              'Profile',
+              style: GoogleFonts.nunito(color: Colors.white, fontSize: 16),
+            ),
             trailing: AnimatedRotation(
               turns: _profileExpanded ? 0.5 : 0,
               duration: const Duration(milliseconds: 200),
               child: const Icon(Icons.expand_more, color: Colors.white70),
             ),
             onTap: () {
-              setState(() { _profileExpanded = !_profileExpanded; });
+              setState(() {
+                _profileExpanded = !_profileExpanded;
+              });
             },
           ),
           AnimatedCrossFade(
@@ -416,18 +556,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               child: Row(
                 children: [
-                  const Icon(Icons.email_outlined, color: Colors.white70, size: 18),
+                  const Icon(
+                    Icons.email_outlined,
+                    color: Colors.white70,
+                    size: 18,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       email,
-                      style: GoogleFonts.nunito(color: Colors.white70, fontSize: 14),
+                      style: GoogleFonts.nunito(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-            crossFadeState: _profileExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            crossFadeState:
+                _profileExpanded
+                    ? CrossFadeState.showSecond
+                    : CrossFadeState.showFirst,
             duration: const Duration(milliseconds: 200),
             sizeCurve: Curves.easeInOut,
           ),
@@ -437,13 +587,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _tile(
-      BuildContext context,
-      IconData icon,
-      String title,
-      VoidCallback onTap, {
-        Color iconColor = Colors.green,
-        Color titleColor = Colors.white,
-      }) {
+    BuildContext context,
+    IconData icon,
+    String title,
+    VoidCallback onTap, {
+    Color iconColor = Colors.green,
+    Color titleColor = Colors.white,
+  }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -453,7 +603,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       child: ListTile(
         leading: Icon(icon, color: iconColor),
-        title: Text(title, style: GoogleFonts.nunito(color: titleColor, fontSize: 16)),
+        title: Text(
+          title,
+          style: GoogleFonts.nunito(color: titleColor, fontSize: 16),
+        ),
         trailing: const Icon(Icons.chevron_right, color: Colors.white70),
         onTap: onTap,
       ),
@@ -461,13 +614,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _tile1(
-      BuildContext context,
-      IconData icon,
-      String title,
-      VoidCallback onTap, {
-        Color iconColor = Colors.green,
-        Color titleColor = Colors.white,
-      }) {
+    BuildContext context,
+    IconData icon,
+    String title,
+    VoidCallback onTap, {
+    Color iconColor = Colors.green,
+    Color titleColor = Colors.white,
+  }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -485,7 +638,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               Icon(icon, color: iconColor),
               const SizedBox(width: 10),
-              Text(title, style: GoogleFonts.nunito(color: titleColor, fontSize: 16)),
+              Text(
+                title,
+                style: GoogleFonts.nunito(color: titleColor, fontSize: 16),
+              ),
             ],
           ),
         ),
@@ -493,7 +649,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _gridTile(BuildContext context, IconData icon, String title, VoidCallback onTap) {
+  Widget _gridTile(
+    BuildContext context,
+    IconData icon,
+    String title,
+    VoidCallback onTap,
+  ) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -512,7 +673,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Text(
               title,
               textAlign: TextAlign.center,
-              style: GoogleFonts.nunito(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+              style: GoogleFonts.nunito(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),

@@ -1,9 +1,9 @@
+import 'package:cents/Auth_Service.dart';
+import 'package:cents/HomePage.dart';
 import 'package:cents/SignUpPage.dart';
+import 'package:cents/screens/app_setup_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-
-import 'OTPverification.dart';
 
 class Vaulticlogin extends StatefulWidget {
   const Vaulticlogin({super.key});
@@ -13,46 +13,99 @@ class Vaulticlogin extends StatefulWidget {
 }
 
 class _VaulticloginState extends State<Vaulticlogin> {
-  final TextEditingController _useremailController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _authService = AuthService();
   bool _isLoading = false;
+  bool _obscurePassword = true;
 
-  void _sendOtp() async {
-    final email = _useremailController.text.trim();
-    if (email.isEmpty) {
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _login() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your email')),
+        const SnackBar(content: Text('Enter your email and password.')),
       );
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
-
+    setState(() => _isLoading = true);
     try {
-      // Sending OTP via Supabase API
-      await Supabase.instance.client.auth.signInWithOtp(email: email);
-
+      final response = await _authService.loginWithEmail(email, password);
       if (!mounted) return;
-      // Navigate to OTP verification page after sending OTP
-      Navigator.push(
-        context,
+      final needsSetup = await _authService.needsAppSetup();
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
-          builder: (_) => OTPVerification(email: email),
+          builder:
+              (_) =>
+                  needsSetup
+                      ? AppSetupScreen(userEmail: response.user?.email ?? email)
+                      : const Homepage(),
         ),
+        (_) => false,
       );
-    } catch (e) {
+    } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to send OTP: $e')),
+        SnackBar(content: Text(AuthService.messageForError(error))),
       );
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _sendPasswordReset() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter your email address first.')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      await _authService.sendPasswordResetEmail(email);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'If an account exists, a password-reset email has been sent.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AuthService.messageForError(error))),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  InputDecoration _decoration({
+    required String label,
+    required IconData icon,
+    Widget? suffixIcon,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: Colors.white),
+      filled: true,
+      fillColor: Colors.black.withOpacity(0.3),
+      prefixIcon: Icon(icon, color: Colors.white),
+      suffixIcon: suffixIcon,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+    );
   }
 
   @override
@@ -60,26 +113,19 @@ class _VaulticloginState extends State<Vaulticlogin> {
     return Scaffold(
       backgroundColor: const Color(0xFF032221),
       body: Container(
-        width: double.infinity,
-        height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF032221),
-              Color(0xFF08413E),
-              Color(0xFF032221),
-            ],
+            colors: [Color(0xFF032221), Color(0xFF08413E), Color(0xFF032221)],
           ),
         ),
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -88,7 +134,6 @@ class _VaulticloginState extends State<Vaulticlogin> {
                       const SizedBox(width: 10),
                       Text(
                         'LOG IN',
-                        textAlign: TextAlign.center,
                         style: GoogleFonts.nunito(
                           fontSize: 38,
                           fontWeight: FontWeight.bold,
@@ -98,28 +143,50 @@ class _VaulticloginState extends State<Vaulticlogin> {
                     ],
                   ),
                   const SizedBox(height: 32),
-
-                  // User Email
                   TextField(
-                    controller: _useremailController,
+                    controller: _emailController,
                     style: const TextStyle(color: Colors.white),
                     keyboardType: TextInputType.emailAddress,
-                    decoration: InputDecoration(
-                      labelText: 'Your email',
-                      labelStyle: const TextStyle(color: Colors.white),
-                      filled: true,
-                      fillColor: Colors.black.withOpacity(0.3),
-                      prefixIcon: const Icon(Icons.person, color: Colors.white),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                    autofillHints: const [AutofillHints.email],
+                    decoration: _decoration(
+                      label: 'Email address',
+                      icon: Icons.person,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _passwordController,
+                    style: const TextStyle(color: Colors.white),
+                    obscureText: _obscurePassword,
+                    autofillHints: const [AutofillHints.password],
+                    onSubmitted: (_) => _isLoading ? null : _login(),
+                    decoration: _decoration(
+                      label: 'Password',
+                      icon: Icons.lock_outline,
+                      suffixIcon: IconButton(
+                        onPressed:
+                            () => setState(
+                              () => _obscurePassword = !_obscurePassword,
+                            ),
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility
+                              : Icons.visibility_off,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  // Login Button
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: _isLoading ? null : _sendPasswordReset,
+                      child: const Text('Forgot password?'),
+                    ),
+                  ),
                   ElevatedButton(
-                    onPressed: _isLoading ? null : _sendOtp,
+                    onPressed: _isLoading ? null : _login,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white.withOpacity(0.1),
                       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -127,46 +194,31 @@ class _VaulticloginState extends State<Vaulticlogin> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: _isLoading
-                        ? const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                ),
+                    child:
+                        _isLoading
+                            ? const SizedBox(
+                              height: 24,
+                              width: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
                               ),
-                              SizedBox(width: 12),
-                              Text(
-                                'Sending OTP...',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                            )
+                            : Text(
+                              'Log in',
+                              style: GoogleFonts.openSans(
+                                fontSize: 22,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
                               ),
-                            ],
-                          )
-                        : Text(
-                            'Confirm',
-                            style: GoogleFonts.openSans(
-                              fontSize: 24,
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
                             ),
-                          ),
                   ),
                   const SizedBox(height: 32),
-
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
                         "Don't have an account?",
-                        textAlign: TextAlign.center,
                         style: GoogleFonts.openSans(
                           color: Colors.white,
                           fontSize: 18,
@@ -174,17 +226,15 @@ class _VaulticloginState extends State<Vaulticlogin> {
                       ),
                       const SizedBox(width: 10),
                       InkWell(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (builder) => const SignUpPage(),
+                        onTap:
+                            () => Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const SignUpPage(),
+                              ),
                             ),
-                          );
-                        },
                         child: Text(
-                          'Sign Up',
-                          textAlign: TextAlign.center,
+                          'Sign up',
                           style: GoogleFonts.openSans(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -195,7 +245,6 @@ class _VaulticloginState extends State<Vaulticlogin> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
                 ],
               ),
             ),

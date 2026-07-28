@@ -186,7 +186,7 @@
 
     <h3>Account Information</h3>
     <ul>
-      <li><strong>Email address</strong> — used solely to sign you in via a one-time password (OTP) sent to your email. We do not use passwords, so no password is ever collected or stored.</li>
+      <li><strong>Email address</strong> — used to create and access your account with your password. Password credentials are managed by our authentication provider, Supabase; Vaultic does not store them directly.</li>
     </ul>
     <p>We do <strong>not</strong> currently collect your name, phone number, date of birth, or any other personal identifiers.</p>
 
@@ -217,7 +217,7 @@
     <h2><span class="icon">②</span>How We Use Your Information</h2>
     <p>We use the information described above only to:</p>
     <ul>
-      <li>Authenticate you via OTP and maintain your session</li>
+      <li>Authenticate you with your email address and password, and maintain your session</li>
       <li>Store, sync, and display the financial data you enter</li>
       <li>Provide backup and recovery of your data across devices</li>
       <li>Respond to support requests you send us</li>
@@ -227,7 +227,7 @@
 
   <div class="card">
     <h2><span class="icon">③</span>How Your Data Is Stored</h2>
-    <p>Vaultic uses <strong>Supabase</strong> as its backend infrastructure provider for authentication and cloud data storage. Supabase stores your account and financial data on our behalf, and handles delivery of OTP emails as part of the sign-in process. Data in transit between the App and Supabase is encrypted (HTTPS/TLS).</p>
+    <p>Vaultic uses <strong>Supabase</strong> as its backend infrastructure provider for authentication and cloud data storage. Supabase manages account authentication and stores your account and financial data on our behalf. Data in transit between the App and Supabase is encrypted (HTTPS/TLS).</p>
     <p>We do not operate our own servers separate from this infrastructure, and we do not maintain a copy of your data outside of Supabase and your local device cache.</p>
   </div>
 
@@ -253,7 +253,7 @@
 
   <div class="card">
     <h2><span class="icon">⑥</span>Security</h2>
-    <p>We rely on industry-standard practices to protect your data, including encrypted data transmission and OTP-based authentication, which avoids the risks associated with password storage. However, no method of electronic storage or transmission is 100% secure, and we cannot guarantee absolute security.</p>
+    <p>We rely on industry-standard practices to protect your data, including encrypted data transmission and password authentication managed by Supabase. However, no method of electronic storage or transmission is 100% secure, and we cannot guarantee absolute security.</p>
   </div>
 
   <div class="card">

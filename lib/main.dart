@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'VaulticLogin.dart';
 import 'Auth_Gate.dart';
+import 'Auth_Service.dart';
+import 'HomePage.dart';
+import 'password_recovery_dialog.dart';
+import 'screens/app_setup_screen.dart';
 import '../screens/branded_background.dart';
 import 'services/hybrid_storage_service.dart';
 import 'services/credential_service.dart';
@@ -23,6 +28,9 @@ void main() async {
     await Supabase.initialize(
       url: CredentialService.supabaseUrl!,
       anonKey: CredentialService.supabaseAnonKey!,
+      authOptions: const FlutterAuthClientOptions(
+        authFlowType: AuthFlowType.pkce,
+      ),
     );
 
     runApp(const VaulticApp());
@@ -58,11 +66,7 @@ class ErrorApp extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(
-                  Icons.error_outline,
-                  size: 64,
-                  color: Colors.red,
-                ),
+                const Icon(Icons.error_outline, size: 64, color: Colors.red),
                 const SizedBox(height: 24),
                 Text(
                   'Configuration Error',
@@ -98,19 +102,79 @@ class ErrorApp extends StatelessWidget {
   }
 }
 
-class VaulticApp extends StatelessWidget {
+class VaulticApp extends StatefulWidget {
   const VaulticApp({super.key});
+
+  @override
+  State<VaulticApp> createState() => _VaulticAppState();
+}
+
+class _VaulticAppState extends State<VaulticApp> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
+  StreamSubscription<AuthState>? _authStateSubscription;
+  bool _showingPasswordRecovery = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _authStateSubscription = Supabase.instance.client.auth.onAuthStateChange
+        .listen((state) {
+          if (state.event == AuthChangeEvent.passwordRecovery &&
+              state.session != null) {
+            _showPasswordRecoveryDialog();
+          }
+        });
+  }
+
+  @override
+  void dispose() {
+    _authStateSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _showPasswordRecoveryDialog() {
+    if (_showingPasswordRecovery) return;
+    _showingPasswordRecovery = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final context = _navigatorKey.currentContext;
+      if (context == null || !mounted) {
+        _showingPasswordRecovery = false;
+        return;
+      }
+
+      final updated = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const PasswordRecoveryDialog(),
+      );
+      if (updated == true && mounted) {
+        final user = Supabase.instance.client.auth.currentUser;
+        final needsSetup = await AuthService().needsAppSetup();
+        if (!mounted) return;
+        _navigatorKey.currentState!.pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder:
+                (_) =>
+                    needsSetup
+                        ? AppSetupScreen(userEmail: user?.email ?? '')
+                        : const Homepage(),
+          ),
+          (_) => false,
+        );
+      }
+      _showingPasswordRecovery = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'Vaultic',
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xFF032221),
-        textTheme: GoogleFonts.openSansTextTheme(
-          ThemeData.dark().textTheme,
-        ),
+        textTheme: GoogleFonts.openSansTextTheme(ThemeData.dark().textTheme),
       ),
       home: const Vaultic(),
       debugShowCheckedModeBanner: false,
@@ -300,41 +364,44 @@ class _VaulticState extends State<Vaultic> {
   @override
   Widget build(BuildContext context) {
     return BrandedBackground(
-      bottomContent: _isLoading
-          ? Column(
-        children: [
-          Container(
-            width: double.infinity,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(2),
-            ),
-            child: Stack(
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  width: (MediaQuery.of(context).size.width - 80) * _progress,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.green,
-                    borderRadius: BorderRadius.circular(2),
+      bottomContent:
+          _isLoading
+              ? Column(
+                children: [
+                  Container(
+                    width: double.infinity,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                    child: Stack(
+                      children: [
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          width:
+                              (MediaQuery.of(context).size.width - 80) *
+                              _progress,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.green,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            _loadingMessage,
-            style: GoogleFonts.openSans(
-              color: Colors.white70,
-              fontSize: 16,
-            ),
-          ),
-        ],
-      )
-          : null,
+                  const SizedBox(height: 20),
+                  Text(
+                    _loadingMessage,
+                    style: GoogleFonts.openSans(
+                      color: Colors.white70,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              )
+              : null,
     );
   }
 }
