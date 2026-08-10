@@ -124,11 +124,6 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
             ),
             actions: [
               IconButton(
-                icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
-                onPressed: _showPdfExportDialog,
-                tooltip: 'Export PDF',
-              ),
-              IconButton(
                 icon: const Icon(Icons.refresh, color: Colors.white),
                 onPressed: _loadTransactionHistory,
               ),

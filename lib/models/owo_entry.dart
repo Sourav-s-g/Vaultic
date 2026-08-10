@@ -21,13 +21,17 @@ class OweEntry {
 
   factory OweEntry.fromMap(Map<String, dynamic> m) {
     return OweEntry(
-      id: (m['id'] ?? '').toString(),
+      id: (m['id'] ?? m['owo_id'] ?? '').toString(),
       counterparty: (m['counterparty'] ?? '').toString(),
       direction: (m['direction'] ?? 'owe').toString(),
-      amount: (m['amount'] is num) ? (m['amount'] as num).toDouble() : double.tryParse((m['amount'] ?? '0').toString()) ?? 0.0,
+      amount: (m['amount'] is num)
+          ? (m['amount'] as num).toDouble()
+          : double.tryParse((m['amount'] ?? '0').toString()) ?? 0.0,
       note: (m['note'] ?? '').toString(),
-      createdAt: DateTime.tryParse((m['createdAt'] ?? '').toString()) ?? DateTime.now(),
-      dueDate: (m['dueDate'] != null && (m['dueDate'] as String).isNotEmpty) ? DateTime.tryParse((m['dueDate']).toString()) : null,
+      createdAt: DateTime.tryParse((m['createdAt'] ?? m['created_at'] ?? '').toString()) ?? DateTime.now(),
+      dueDate: (m['dueDate'] != null || m['due_date'] != null)
+          ? DateTime.tryParse((m['dueDate'] ?? m['due_date']).toString())
+          : null,
       settled: (m['settled'] ?? false) == true,
     );
   }
@@ -45,5 +49,3 @@ class OweEntry {
     };
   }
 }
-
-
