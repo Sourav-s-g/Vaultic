@@ -183,6 +183,8 @@ class _OwesOwnsScreenState extends State<OwesOwnsScreen> {
 
   Widget _tile(OweEntry e) {
     final color = e.direction == 'owe' ? Colors.orangeAccent : Colors.lightGreen;
+    final isPending = e.syncStatus == 'pending';
+    
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -191,7 +193,16 @@ class _OwesOwnsScreenState extends State<OwesOwnsScreen> {
         border: Border.all(color: Colors.white.withOpacity(0.1))
       ),
       child: ListTile(
-        title: Text('${e.counterparty} • ₹${e.amount.toStringAsFixed(0)}', style: GoogleFonts.nunito(color: color, fontWeight: FontWeight.w700)),
+        title: Row(
+          children: [
+            Text('${e.counterparty} • ₹${e.amount.toStringAsFixed(0)}', 
+              style: GoogleFonts.nunito(color: color, fontWeight: FontWeight.w700)),
+            if (isPending) ...[
+              const SizedBox(width: 8),
+              const Icon(Icons.cloud_off, size: 14, color: Colors.orangeAccent),
+            ],
+          ],
+        ),
         subtitle: Text(_subtitle(e), style: GoogleFonts.nunito(color: Colors.white70, fontSize: 12)),
         trailing: PopupMenuButton<String>(
           icon: const Icon(Icons.more_vert, color: Colors.white70),

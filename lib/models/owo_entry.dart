@@ -1,5 +1,5 @@
 class OweEntry {
-  final String id; // uuid or timestamp-based
+  final String id; // This will store our stable identifier (owo_id)
   final String counterparty;
   final String direction; // 'owe' or 'owned'
   final double amount;
@@ -7,6 +7,7 @@ class OweEntry {
   final DateTime createdAt;
   final DateTime? dueDate;
   final bool settled;
+  final String syncStatus; // 'synced' or 'pending'
 
   OweEntry({
     required this.id,
@@ -17,11 +18,15 @@ class OweEntry {
     required this.createdAt,
     this.dueDate,
     this.settled = false,
+    this.syncStatus = 'synced',
   });
 
   factory OweEntry.fromMap(Map<String, dynamic> m) {
+    // PREFER owo_id (stable ID) over id (Supabase internal PK)
+    final stableId = (m['owo_id'] ?? m['owoId'] ?? m['id'] ?? '').toString();
+    
     return OweEntry(
-      id: (m['id'] ?? m['owo_id'] ?? '').toString(),
+      id: stableId,
       counterparty: (m['counterparty'] ?? '').toString(),
       direction: (m['direction'] ?? 'owe').toString(),
       amount: (m['amount'] is num)
@@ -33,12 +38,13 @@ class OweEntry {
           ? DateTime.tryParse((m['dueDate'] ?? m['due_date']).toString())
           : null,
       settled: (m['settled'] ?? false) == true,
+      syncStatus: (m['_syncStatus'] ?? 'synced').toString(),
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
+      'id': id, // This is our stable owo_id
       'counterparty': counterparty,
       'direction': direction,
       'amount': amount,
@@ -46,6 +52,7 @@ class OweEntry {
       'createdAt': createdAt.toIso8601String(),
       'dueDate': dueDate?.toIso8601String(),
       'settled': settled,
+      '_syncStatus': syncStatus,
     };
   }
 }

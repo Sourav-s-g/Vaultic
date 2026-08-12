@@ -37,6 +37,7 @@ class SupabaseService {
           .eq('name', name);
     } catch (e) {
       print('Error deleting category: $e');
+      rethrow;
     }
   }
 
@@ -53,18 +54,16 @@ class SupabaseService {
 
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
+      print('Error fetching categories: $e');
       // Check if it's a session refresh error
       if (e.toString().contains('oauth_client_id') ||
           e.toString().contains('AuthRetryableFetchException')) {
         print('Warning: Session refresh failed, clearing invalid session');
         try {
           await _client.auth.signOut();
-        } catch (_) {
-          // Ignore sign out errors
-        }
+        } catch (_) {}
       }
-      print('Error fetching categories: $e');
-      return [];
+      rethrow;
     }
   }
 
@@ -72,21 +71,8 @@ class SupabaseService {
     List<Map<String, dynamic>> categories,
   ) async {
     if (!_isSessionValid() || userId == null) return;
-
-    try {
-      // SAFE APPROACH: Add categories individually instead of bulk delete+insert
-      // This prevents data loss if any individual category fails
-
-      for (final category in categories) {
-        try {
-          await addCategory(category);
-        } catch (e) {
-          print('Error adding individual category: $e');
-          // Continue with other categories instead of failing completely
-        }
-      }
-    } catch (e) {
-      print('Error saving categories: $e');
+    for (final category in categories) {
+      await addCategory(category);
     }
   }
 
@@ -94,7 +80,6 @@ class SupabaseService {
     if (!_isSessionValid() || userId == null) return;
 
     try {
-      // Check if category already exists to prevent duplicates
       final categoryName = category['name'] ?? '';
       if (categoryName.isNotEmpty) {
         final existing = await _client
@@ -104,10 +89,7 @@ class SupabaseService {
             .eq('name', categoryName)
             .maybeSingle();
 
-        if (existing != null) {
-          print('Category already exists, skipping: $categoryName');
-          return;
-        }
+        if (existing != null) return;
       }
 
       await _client.from('categories').insert({
@@ -116,10 +98,9 @@ class SupabaseService {
         'color': category['color'] ?? '#FF6B6B',
         'icon': category['icon'] ?? 'category',
       });
-
-      print('Category added successfully');
     } catch (e) {
       print('Error adding category: $e');
+      rethrow;
     }
   }
 
@@ -136,18 +117,8 @@ class SupabaseService {
 
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      // Check if it's a session refresh error
-      if (e.toString().contains('oauth_client_id') ||
-          e.toString().contains('AuthRetryableFetchException')) {
-        print('Warning: Session refresh failed, clearing invalid session');
-        try {
-          await _client.auth.signOut();
-        } catch (_) {
-          // Ignore sign out errors
-        }
-      }
       print('Error fetching transactions: $e');
-      return [];
+      rethrow;
     }
   }
 
@@ -155,21 +126,8 @@ class SupabaseService {
     List<Map<String, dynamic>> transactions,
   ) async {
     if (!_isSessionValid() || userId == null) return;
-
-    try {
-      // SAFE APPROACH: Add transactions individually instead of bulk delete+insert
-      // This prevents data loss if any individual transaction fails
-
-      for (final transaction in transactions) {
-        try {
-          await addTransaction(transaction);
-        } catch (e) {
-          print('Error adding individual transaction: $e');
-          // Continue with other transactions instead of failing completely
-        }
-      }
-    } catch (e) {
-      print('Error saving transactions: $e');
+    for (final transaction in transactions) {
+      await addTransaction(transaction);
     }
   }
 
@@ -177,8 +135,7 @@ class SupabaseService {
     if (!_isSessionValid() || userId == null) return;
 
     try {
-      // Check if transaction already exists to prevent duplicates
-      final transactionId = transaction['transactionId'] ?? '';
+      final transactionId = (transaction['transactionId'] ?? transaction['transaction_id'] ?? '').toString();
       if (transactionId.isNotEmpty) {
         final existing = await _client
             .from('transactions')
@@ -187,16 +144,12 @@ class SupabaseService {
             .eq('transaction_id', transactionId)
             .maybeSingle();
 
-        if (existing != null) {
-          print('Transaction already exists, skipping: $transactionId');
-          return;
-        }
+        if (existing != null) return;
       }
 
-      // Create a clean transaction object with only the fields we know exist
       final cleanTransaction = {
         'user_id': userId!,
-        'transaction_id': transaction['transactionId'] ?? '',
+        'transaction_id': transactionId,
         'description': transaction['description'] ?? '',
         'amount': transaction['amount'] ?? 0.0,
         'type': transaction['type'] ?? 'Debit',
@@ -205,42 +158,13 @@ class SupabaseService {
         'status': transaction['status'] ?? 'Completed',
       };
 
-      // Try to add optional fields if they exist
-      if (transaction.containsKey('isSplit')) {
-        cleanTransaction['is_split'] = transaction['isSplit'];
-      }
-      if (transaction.containsKey('splitCount')) {
-        cleanTransaction['split_count'] = transaction['splitCount'];
-      }
+      if (transaction.containsKey('isSplit')) cleanTransaction['is_split'] = transaction['isSplit'];
+      if (transaction.containsKey('splitCount')) cleanTransaction['split_count'] = transaction['splitCount'];
 
       await _client.from('transactions').insert(cleanTransaction);
-
-      print('Transaction added successfully');
     } catch (e) {
       print('Error adding transaction: $e');
-
-      // If still failing, try with minimal fields only
-      try {
-        final minimalTransaction = {
-          'user_id': userId!,
-          'transaction_id': transaction['transactionId'] ?? '',
-          'description': transaction['description'] ?? '',
-          'amount': transaction['amount'] ?? 0.0,
-          'type': transaction['type'] ?? 'Debit',
-          'date': transaction['date'] ?? DateTime.now().toIso8601String(),
-          'category': transaction['category'] ?? '',
-          'status': transaction['status'] ?? 'Completed',
-        };
-
-        await _client.from('transactions').insert(minimalTransaction);
-
-        print('Transaction added with minimal schema');
-      } catch (minimalError) {
-        print('Minimal schema also failed: $minimalError');
-        print(
-          'Please check your database schema and recreate the transactions table',
-        );
-      }
+      rethrow;
     }
   }
 
@@ -249,50 +173,43 @@ class SupabaseService {
     Map<String, dynamic> updates,
   ) async {
     if (!_isSessionValid() || userId == null) return;
-
     try {
+      // Map camelCase to snake_case for Supabase if necessary
+      final mappedUpdates = Map<String, dynamic>.from(updates);
+      if (mappedUpdates.containsKey('transactionId')) {
+        mappedUpdates['transaction_id'] = mappedUpdates.remove('transactionId');
+      }
+      
       await _client
           .from('transactions')
-          .update(updates)
+          .update(mappedUpdates)
           .eq('user_id', userId!)
           .eq('transaction_id', transactionId);
     } catch (e) {
       print('Error updating transaction: $e');
+      rethrow;
     }
   }
 
   static Future<void> deleteTransaction(String transactionId) async {
-    if (!_isSessionValid() || userId == null) {
-      print('Cannot delete transaction: user not authenticated');
-      return;
-    }
-
-    print('Attempting to delete transaction from cloud: $transactionId');
-
+    if (!_isSessionValid() || userId == null) return;
     try {
-      final result = await _client
+      await _client
           .from('transactions')
           .delete()
           .eq('user_id', userId!)
           .eq('transaction_id', transactionId);
-
-      print('Cloud deletion result: $result');
     } catch (e) {
-      print('Error deleting transaction from cloud: $e');
-      // Don't rethrow - let local deletion succeed even if cloud fails
+      print('Error deleting transaction: $e');
+      rethrow;
     }
   }
 
   // Budgets
   static Future<Map<String, double>> getBudgets() async {
     if (!_isSessionValid() || userId == null) return {};
-
     try {
-      final response = await _client.from('budgets').select().eq(
-        'user_id',
-        userId!,
-      );
-
+      final response = await _client.from('budgets').select().eq('user_id', userId!);
       final budgets = <String, double>{};
       for (final row in response) {
         budgets[row['category']] = (row['amount'] as num).toDouble();
@@ -300,99 +217,51 @@ class SupabaseService {
       return budgets;
     } catch (e) {
       print('Error fetching budgets: $e');
-      return {};
+      rethrow;
     }
   }
 
   static Future<void> saveBudgets(Map<String, double> budgets) async {
     if (!_isSessionValid() || userId == null) return;
-
-    try {
-      // SAFE APPROACH: Add budgets individually instead of bulk delete+insert
-      // This prevents data loss if any individual budget fails
-
-      for (final entry in budgets.entries) {
-        try {
-          await addBudget(entry.key, entry.value);
-        } catch (e) {
-          print('Error adding individual budget: $e');
-          // Continue with other budgets instead of failing completely
-        }
-      }
-    } catch (e) {
-      print('Error saving budgets: $e');
+    for (final entry in budgets.entries) {
+      await addBudget(entry.key, entry.value);
     }
   }
 
   static Future<void> addBudget(String category, double amount) async {
     if (!_isSessionValid() || userId == null) return;
-
     try {
-      // Check if budget already exists to prevent duplicates
-      final existing = await _client
-          .from('budgets')
-          .select('id')
-          .eq('user_id', userId!)
-          .eq('category', category)
-          .maybeSingle();
-
-      if (existing != null) {
-        // Update existing budget
-        await _client
-            .from('budgets')
-            .update({'amount': amount})
-            .eq('user_id', userId!)
-            .eq('category', category);
-        print('Budget updated for category: $category');
-      } else {
-        // Insert new budget
-        await _client.from('budgets').insert({
-          'user_id': userId!,
-          'category': category,
-          'amount': amount,
-        });
-        print('Budget added for category: $category');
-      }
+      await _client.from('budgets').upsert({
+        'user_id': userId!,
+        'category': category,
+        'amount': amount,
+      }, onConflict: 'user_id, category');
     } catch (e) {
-      print('Error adding budget: $e');
+      print('Error adding/updating budget: $e');
+      rethrow;
     }
   }
 
   // OWO Entries
   static Future<List<Map<String, dynamic>>> getOwoEntries() async {
     if (!_isSessionValid() || userId == null) return [];
-
     try {
       final response = await _client
           .from('owo_entries')
           .select()
           .eq('user_id', userId!)
           .order('created_at', ascending: false);
-
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       print('Error fetching OWO entries: $e');
-      return [];
+      rethrow;
     }
   }
 
   static Future<void> saveOwoEntries(List<Map<String, dynamic>> entries) async {
     if (!_isSessionValid() || userId == null) return;
-
-    try {
-      // SAFE APPROACH: Add OWO entries individually instead of bulk delete+insert
-      // This prevents data loss if any individual entry fails
-
-      for (final entry in entries) {
-        try {
-          await addOwoEntry(entry);
-        } catch (e) {
-          print('Error adding individual OWO entry: $e');
-          // Continue with other entries instead of failing completely
-        }
-      }
-    } catch (e) {
-      print('Error saving OWO entries: $e');
+    for (final entry in entries) {
+      await addOwoEntry(entry);
     }
   }
 
@@ -400,9 +269,7 @@ class SupabaseService {
     if (!_isSessionValid() || userId == null) return;
 
     try {
-      // Check if OWO entry already exists to prevent duplicates
-      final owoId = (entry['owoId'] ?? entry['owo_id'] ?? entry['id'] ?? '')
-          .toString();
+      final owoId = (entry['owoId'] ?? entry['owo_id'] ?? entry['id'] ?? '').toString();
       if (owoId.isNotEmpty) {
         final existing = await _client
             .from('owo_entries')
@@ -411,10 +278,7 @@ class SupabaseService {
             .eq('owo_id', owoId)
             .maybeSingle();
 
-        if (existing != null) {
-          print('OWO entry already exists, skipping: $owoId');
-          return;
-        }
+        if (existing != null) return;
       }
 
       await _client.from('owo_entries').insert({
@@ -424,25 +288,20 @@ class SupabaseService {
         'direction': entry['direction'] ?? 'owe',
         'amount': entry['amount'] ?? 0.0,
         'note': entry['note'] ?? '',
-        'created_at': entry['createdAt'] ??
-            entry['created_at'] ??
-            DateTime.now().toIso8601String(),
+        'created_at': entry['createdAt'] ?? entry['created_at'] ?? DateTime.now().toIso8601String(),
         'due_date': entry['dueDate'] ?? entry['due_date'],
         'settled': entry['settled'] ?? false,
       });
-
-      print('OWO entry added successfully');
     } catch (e) {
       print('Error adding OWO entry: $e');
+      rethrow;
     }
   }
 
   static Future<void> updateOwoEntry(Map<String, dynamic> entry) async {
     if (!_isSessionValid() || userId == null) return;
-
     try {
-      final owoId = (entry['owo_id'] ?? entry['owoId'] ?? entry['id'] ?? '')
-          .toString();
+      final owoId = (entry['owo_id'] ?? entry['owoId'] ?? entry['id'] ?? '').toString();
       if (owoId.isEmpty) return;
 
       final updates = {
@@ -453,8 +312,6 @@ class SupabaseService {
         'due_date': entry['dueDate'] ?? entry['due_date'],
         'settled': entry['settled'],
       };
-
-      // Remove null values to avoid overwriting with null unless intended
       updates.removeWhere((key, value) => value == null);
 
       await _client
@@ -462,50 +319,41 @@ class SupabaseService {
           .update(updates)
           .eq('user_id', userId!)
           .eq('owo_id', owoId);
-
-      print('OWO entry updated successfully');
     } catch (e) {
       print('Error updating OWO entry: $e');
+      rethrow;
     }
   }
 
   static Future<void> deleteOwoEntry(String owoId) async {
     if (!_isSessionValid() || userId == null) return;
-
     try {
       await _client
           .from('owo_entries')
           .delete()
           .eq('user_id', userId!)
           .eq('owo_id', owoId);
-      print('OWO entry deleted successfully from cloud');
     } catch (e) {
       print('Error deleting OWO entry: $e');
+      rethrow;
     }
   }
 
   // Initial Balance
   static Future<double?> getInitialBalance() async {
     if (!_isSessionValid() || userId == null) return null;
-
     try {
       final response = await _client
           .from('user_settings')
           .select('initial_balance')
           .eq('user_id', userId!)
           .maybeSingle();
-
+      
       if (response != null && response['initial_balance'] != null) {
         return (response['initial_balance'] as num).toDouble();
       }
       return null;
     } catch (e) {
-      // If the settings table doesn't exist, ignore quietly and treat as no balance set
-      final msg = e.toString();
-      if (msg.contains("PGRST205") ||
-          msg.contains("Could not find the table 'public.user_settings'")) {
-        return null;
-      }
       print('Error fetching initial balance: $e');
       return null;
     }
@@ -513,7 +361,6 @@ class SupabaseService {
 
   static Future<void> setInitialBalance(double balance) async {
     if (!_isSessionValid() || userId == null) return;
-
     try {
       await _client.from('user_settings').upsert({
         'user_id': userId!,
@@ -521,26 +368,8 @@ class SupabaseService {
         'updated_at': DateTime.now().toIso8601String(),
       });
     } catch (e) {
-      // If table missing, skip without noisy error
-      final msg = e.toString();
-      if (msg.contains("PGRST205") ||
-          msg.contains("Could not find the table 'public.user_settings'")) {
-        return;
-      }
       print('Error saving initial balance: $e');
-    }
-  }
-
-  // Sync all data
-  static Future<void> syncAllData() async {
-    if (!_isSessionValid() || userId == null) return;
-
-    try {
-      // This will be called when user logs in to sync local data to cloud
-      // Implementation depends on your sync strategy
-      print('Syncing all data for user: $userId');
-    } catch (e) {
-      print('Error syncing data: $e');
+      rethrow;
     }
   }
 }

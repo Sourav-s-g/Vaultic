@@ -87,12 +87,12 @@ class HybridStorageService {
   static Future<void> addTransaction(Map<String, dynamic> transaction) async {
     final transactions = await getTransactions();
     try {
-      transactions.add(transaction);
-      await _saveToLocal(_transactionsKey, transactions);
-
       transaction['_syncStatus'] = 'pending';
       transaction['_syncAttempts'] = 0;
       transaction['_lastSyncAttempt'] = '';
+      
+      transactions.add(transaction);
+      await _saveToLocal(_transactionsKey, transactions);
 
       if (_isAuthenticated) {
         try {
@@ -101,8 +101,8 @@ class HybridStorageService {
           transaction['_lastSyncAttempt'] = DateTime.now().toIso8601String();
           final idx = transactions.indexWhere(
             (t) =>
-                (t['transactionId'] ?? '').toString() ==
-                (transaction['transactionId'] ?? '').toString(),
+                (t['transactionId'] ?? t['transaction_id'] ?? '').toString() ==
+                (transaction['transactionId'] ?? transaction['transaction_id'] ?? '').toString(),
           );
           if (idx != -1) {
             transactions[idx] = transaction;
@@ -128,7 +128,7 @@ class HybridStorageService {
   ) async {
     final transactions = await getTransactions();
     final index = transactions.indexWhere(
-      (t) => (t['transactionId'] ?? '').toString() == transactionId,
+      (t) => (t['transactionId'] ?? t['transaction_id'] ?? '').toString() == transactionId,
     );
     if (index != -1) {
       final transaction = transactions[index];
@@ -160,8 +160,7 @@ class HybridStorageService {
     final transactions = await _getFromLocal(_transactionsKey);
     transactions.removeWhere(
       (t) =>
-          (t['transactionId'] ?? '').toString() == transactionId ||
-          (t['transaction_id'] ?? '').toString() == transactionId,
+          (t['transactionId'] ?? t['transaction_id'] ?? '').toString() == transactionId,
     );
     await _saveToLocal(_transactionsKey, transactions);
 
@@ -230,39 +229,62 @@ class HybridStorageService {
 
   static Future<void> addOwoEntry(Map<String, dynamic> entry) async {
     final entries = await getOwoEntries();
+    
+    entry['_syncStatus'] = 'pending';
     entries.add(entry);
     await saveOwoEntries(entries);
+    
     if (_isAuthenticated) {
       try {
         await SupabaseService.addOwoEntry(entry);
-      } catch (_) {}
+        final idx = entries.indexWhere((e) => 
+          (e['id'] ?? e['owo_id'] ?? '').toString() == (entry['id'] ?? entry['owo_id'] ?? '').toString());
+        if (idx != -1) {
+          entries[idx]['_syncStatus'] = 'synced';
+          await saveOwoEntries(entries);
+        }
+      } catch (_) {
+        await _queueForSync(entry, 'owo_add');
+      }
     }
   }
 
   static Future<void> updateOwoEntry(Map<String, dynamic> entry) async {
     final entries = await getOwoEntries();
+    final entryId = (entry['id'] ?? entry['owo_id'] ?? entry['owoId'] ?? '').toString();
     final index = entries.indexWhere(
-      (e) => (e['id'] ?? '').toString() == entry['id'],
+      (e) => (e['id'] ?? e['owo_id'] ?? e['owoId'] ?? '').toString() == entryId,
     );
     if (index != -1) {
+      entry['_syncStatus'] = 'pending';
       entries[index] = entry;
       await saveOwoEntries(entries);
     }
+    
     if (_isAuthenticated) {
       try {
         await SupabaseService.updateOwoEntry(entry);
-      } catch (_) {}
+        if (index != -1) {
+          entries[index]['_syncStatus'] = 'synced';
+          await saveOwoEntries(entries);
+        }
+      } catch (_) {
+        await _queueForSync(entry, 'owo_update');
+      }
     }
   }
 
   static Future<void> deleteOwoEntry(String id) async {
     final entries = await getOwoEntries();
-    entries.removeWhere((e) => (e['id'] ?? '').toString() == id);
+    entries.removeWhere((e) => (e['id'] ?? e['owo_id'] ?? e['owoId'] ?? '').toString() == id);
     await saveOwoEntries(entries);
+    
     if (_isAuthenticated) {
       try {
         await SupabaseService.deleteOwoEntry(id);
-      } catch (_) {}
+      } catch (_) {
+        await _queueForSync({'id': id}, 'owo_delete');
+      }
     }
   }
 
@@ -375,16 +397,6 @@ class HybridStorageService {
     await prefs.setString(_lastMonthlyRolloverKey, now.toIso8601String());
   }
 
-  // ------------------------------------------------------------
-  // FIXED: guards against duplicate "Balance carried forward"
-  // transactions. The local `_processedMonthsKey` flag above can be
-  // lost relative to the cloud/transaction data (reinstall, simulator
-  // fresh install, restoring an older backup, etc.), which previously
-  // caused this method to insert a second carry-forward transaction
-  // for a month that had already been rolled over. We now check the
-  // actual transaction list — the real source of truth — before
-  // inserting anything.
-  // ------------------------------------------------------------
   static Future<void> _addCarryForwardCredit(
     DateTime month,
     double amount,
@@ -424,10 +436,6 @@ class HybridStorageService {
     }
   }
 
-  // ------------------------------------------------------------
-  // FIXED: same duplicate-insert guard as _addCarryForwardCredit,
-  // applied to negative-balance OWO entries.
-  // ------------------------------------------------------------
   static Future<void> _addNegativeBalanceOwo(
     DateTime month,
     double amount,
@@ -435,7 +443,7 @@ class HybridStorageService {
     final monthTag = '${month.year}_${month.month}';
     final entries = await getOwoEntries();
     final alreadyExists = entries.any((e) {
-      final id = (e['id'] ?? '').toString();
+      final id = (e['id'] ?? e['owo_id'] ?? '').toString();
       final note = (e['note'] ?? '').toString();
       return id.startsWith('neg_$monthTag') ||
           note.contains('Negative balance from ${_formatMonthName(month)}');
@@ -479,8 +487,6 @@ class HybridStorageService {
   static Future<void> syncOnLogin() async {
     if (!_isAuthenticated) return;
     try {
-      // Local storage belongs to the previously active account. Never migrate
-      // it automatically into a newly authenticated account.
       await clearLocalCache();
       await Future.wait([
         getCategories(),
@@ -495,8 +501,6 @@ class HybridStorageService {
     } catch (_) {}
   }
 
-  /// Removes all account-specific data cached on this device.
-  /// Cloud records are intentionally left untouched.
   static Future<void> clearLocalCache() async {
     final prefs = await SharedPreferences.getInstance();
     await Future.wait([
@@ -549,7 +553,7 @@ class HybridStorageService {
     final transactions = await getTransactions();
     final categories = await getCategories();
     final budgets = await getBudgets();
-    final owoEntries = await OwesOwnsStorage.getOwoEntries();
+    final owoEntries = await getOwoEntries();
 
     final backup = {
       'transactions': transactions,
@@ -657,11 +661,72 @@ class HybridStorageService {
   }
 
   static Future<Map<String, int>> processSyncQueue({bool force = false}) async {
-    return {'success': 0, 'failed': 0};
+    if (!_isAuthenticated) return {'success': 0, 'failed': 0};
+
+    final prefs = await SharedPreferences.getInstance();
+    final q = jsonDecode(prefs.getString(_syncQueueKey) ?? '[]');
+    if (q.isEmpty) return {'success': 0, 'failed': 0};
+
+    List remaining = [];
+    int successCount = 0;
+    int failedCount = 0;
+
+    for (var item in q) {
+      final op = item['operation'];
+      final data = item['data'];
+      
+      try {
+        switch (op) {
+          case 'add':
+            await SupabaseService.addTransaction(data);
+            await _updateLocalSyncStatus(_transactionsKey, 'transactionId', data['transactionId'], 'synced');
+            break;
+          case 'update':
+            final id = data['transactionId'];
+            Map<String, dynamic> updates = Map.from(data);
+            updates.remove('transactionId');
+            await SupabaseService.updateTransaction(id, updates);
+            await _updateLocalSyncStatus(_transactionsKey, 'transactionId', id, 'synced');
+            break;
+          case 'delete':
+            await SupabaseService.deleteTransaction(data['transactionId']);
+            break;
+          case 'owo_add':
+            await SupabaseService.addOwoEntry(data);
+            await _updateLocalSyncStatus(_owoKey, 'id', data['id'] ?? data['owo_id'], 'synced');
+            break;
+          case 'owo_update':
+            await SupabaseService.updateOwoEntry(data);
+            await _updateLocalSyncStatus(_owoKey, 'id', data['id'] ?? data['owo_id'], 'synced');
+            break;
+          case 'owo_delete':
+            await SupabaseService.deleteOwoEntry(data['id'] ?? data['owo_id']);
+            break;
+        }
+        successCount++;
+      } catch (e) {
+        print('Sync failed for $op: $e');
+        failedCount++;
+        remaining.add(item);
+      }
+    }
+
+    await prefs.setString(_syncQueueKey, jsonEncode(remaining));
+    return {'success': successCount, 'failed': failedCount};
+  }
+
+  static Future<void> _updateLocalSyncStatus(String storageKey, String idKey, String idValue, String status) async {
+    final list = await _getFromLocal(storageKey);
+    final idx = list.indexWhere((e) => (e[idKey] ?? e['owo_id'] ?? e['transaction_id'] ?? '').toString() == idValue);
+    if (idx != -1) {
+      list[idx]['_syncStatus'] = status;
+      list[idx]['_lastSyncAttempt'] = DateTime.now().toIso8601String();
+      await _saveToLocal(storageKey, list);
+    }
   }
 
   static Future<Map<String, int>> syncNow() async {
-    return {'success': 0, 'failed': 0};
+    return await processSyncQueue(force: true);
   }
 }
 
