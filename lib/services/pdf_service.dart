@@ -2,47 +2,66 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/transaction_history_model.dart';
 import '../services/hybrid_storage_service.dart';
+
+/// Internal helper that pairs a transaction with its running balance
+/// at that point in the statement (bank-statement style).
+class _StatementLine {
+  final Transaction transaction;
+  final double runningBalance;
+  _StatementLine(this.transaction, this.runningBalance);
+}
 
 class PdfService {
   static const PdfColor _primaryColor = PdfColor.fromInt(0xFF032221);
   static const PdfColor _accentColor = PdfColor.fromInt(0xFF00C851);
   static const PdfColor _textColor = PdfColor.fromInt(0xFFFFFFFF);
-  static const PdfColor _lightTextColor = PdfColor.fromInt(0xFFB0B0B0);
+  static const PdfColor _lightTextColor = PdfColor.fromInt(0xFF7A7A7A);
+  static const PdfColor _borderColor = PdfColor.fromInt(0xFFE0E0E0);
 
-  // Helper method to format currency without Unicode symbols
-  static String _formatCurrency(double amount) {
-    return 'Rs ${amount.toStringAsFixed(0)}';
+  static const String _appName = 'VAULTIC';
+
+  // Cache the loaded font set so repeated report generation in one
+  // session doesn't refetch/re-decode fonts every time.
+  static pw.ThemeData? _cachedTheme;
+
+  static Future<pw.ThemeData> _theme() async {
+    if (_cachedTheme != null) return _cachedTheme!;
+    // NotoSans covers the Rupee sign (\u20B9), smart quotes, dashes, etc.
+    // so we no longer need to lossily strip characters to '?'.
+    final base = await PdfGoogleFonts.notoSansRegular();
+    final bold = await PdfGoogleFonts.notoSansBold();
+    _cachedTheme = pw.ThemeData.withFont(base: base, bold: bold);
+    return _cachedTheme!;
   }
 
-  // Helper method to sanitize text for PDF rendering
-  static String _sanitizeText(String text) {
-    return text
-        .replaceAll('\u2019', "'")  // Replace smart quotes
-        .replaceAll('\u201c', '"')  // Replace smart double quotes
-        .replaceAll('\u201d', '"')  // Replace smart double quotes
-        .replaceAll('\u2013', '-')  // Replace en dash
-        .replaceAll('\u2014', '-')  // Replace em dash
-        .replaceAll('\u2026', '...') // Replace ellipsis
-        .replaceAll('\u20b9', 'Rs')  // Replace rupee symbol
-        .replaceAll('\u2022', '-')   // Replace bullet
-        .replaceAll(RegExp(r'[^\x00-\x7F]'), '?'); // Replace any other non-ASCII characters
+  // Currency formatting now uses the real Rupee symbol since the font
+  // supports it. Falls back gracefully if amount is negative.
+  static String _formatCurrency(double amount, {bool showSign = false}) {
+    final sign = showSign && amount > 0 ? '+' : (showSign && amount < 0 ? '-' : '');
+    final value = amount.abs().toStringAsFixed(2);
+    return '$sign\u20B9$value';
   }
 
-  /// Generate PDF report for transactions
+  static String _formatStatementNumber(DateTime? start, DateTime? end) {
+    final now = DateTime.now();
+    final period = '${(start ?? now).year}${(start ?? now).month.toString().padLeft(2, '0')}';
+    return 'STMT-$period-${now.millisecondsSinceEpoch % 100000}';
+  }
+
+  /// Generate PDF report for transactions, styled like a bank statement.
   static Future<Uint8List> generateTransactionReport({
     DateTime? startDate,
     DateTime? endDate,
     bool includeCharts = true,
     bool includeSummary = true,
   }) async {
-    // Get transactions from storage
     final rawTransactions = await HybridStorageService.getTransactions();
     final transactions = rawTransactions.map((m) => _transactionFromMap(m)).toList();
-    
-    // Filter by date range if provided
+
     List<Transaction> filteredTransactions = transactions;
     if (startDate != null || endDate != null) {
       filteredTransactions = transactions.where((t) {
@@ -51,120 +70,176 @@ class PdfService {
         return true;
       }).toList();
     }
-    
-    // Sort by date (newest first)
-    filteredTransactions.sort((a, b) => b.date.compareTo(a.date));
-    
-    // Calculate summary data
-    final summary = await _calculateSummary(filteredTransactions);
-    
-    // Create PDF document
-    final pdf = pw.Document();
-    
-    // Add pages
+
+    // Bank statements compute running balance chronologically (oldest first),
+    // then are typically displayed newest-first. We compute ascending,
+    // then reverse for display so the running balance is accurate.
+    filteredTransactions.sort((a, b) => a.date.compareTo(b.date));
+
+    final initialBalance = await HybridStorageService.getInitialBalance();
+    final statementLines = <_StatementLine>[];
+    double runningBalance = initialBalance;
+    for (final t in filteredTransactions) {
+      if (t.type == 'Credit') {
+        runningBalance += t.amount;
+      } else {
+        runningBalance -= t.amount;
+      }
+      statementLines.add(_StatementLine(t, runningBalance));
+    }
+
+    final openingBalance = initialBalance;
+    final closingBalance = statementLines.isNotEmpty ? statementLines.last.runningBalance : initialBalance;
+    final summary = _calculateSummary(filteredTransactions, openingBalance, closingBalance);
+
+    // Display newest-first, but keep the running balance computed above.
+    final displayLines = statementLines.reversed.toList();
+
+    final theme = await _theme();
+    final pdf = pw.Document(theme: theme);
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(32),
+        header: (context) => context.pageNumber == 1
+            ? pw.SizedBox()
+            : _buildContinuationHeader(context),
+        footer: (context) => _buildFooter(context),
         build: (pw.Context context) {
           return [
             _buildHeader(context, startDate, endDate),
-            if (includeSummary) _buildSummarySection(context, summary),
+            if (includeSummary) _buildSummarySection(context, summary, openingBalance, closingBalance),
             if (includeCharts) _buildChartsSection(context, filteredTransactions),
-            _buildTransactionsTable(context, filteredTransactions),
-            _buildFooter(context),
+            ..._buildTransactionsTable(context, displayLines),
           ];
         },
       ),
     );
-    
+
     return pdf.save();
   }
 
-  /// Build PDF header
+  /// Header styled like a bank statement letterhead.
   static pw.Widget _buildHeader(pw.Context context, DateTime? startDate, DateTime? endDate) {
     final now = DateTime.now();
     final dateRange = _formatDateRange(startDate, endDate);
-    
+    final statementNo = _formatStatementNumber(startDate, endDate);
+
     return pw.Container(
-      margin: const pw.EdgeInsets.only(bottom: 24),
+      margin: const pw.EdgeInsets.only(bottom: 20),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text(
-                'VAULTIC',
-                style: pw.TextStyle(
-                  fontSize: 28,
-                  fontWeight: pw.FontWeight.bold,
-                  color: _primaryColor,
-                ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    _appName,
+                    style: pw.TextStyle(
+                      fontSize: 26,
+                      fontWeight: pw.FontWeight.bold,
+                      color: _primaryColor,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  pw.SizedBox(height: 2),
+                  pw.Text(
+                    'Personal Finance',
+                    style: pw.TextStyle(fontSize: 9, color: _lightTextColor),
+                  ),
+                ],
               ),
-              pw.Text(
-                'Transaction Report',
-                style: pw.TextStyle(
-                  fontSize: 18,
-                  fontWeight: pw.FontWeight.bold,
-                  color: _primaryColor,
-                ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text(
+                    'STATEMENT OF ACCOUNT',
+                    style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: _primaryColor),
+                  ),
+                  pw.SizedBox(height: 2),
+                  pw.Text('Statement No: $statementNo', style: pw.TextStyle(fontSize: 9, color: _lightTextColor)),
+                ],
               ),
             ],
           ),
-          pw.SizedBox(height: 8),
+          pw.SizedBox(height: 14),
+          pw.Container(height: 1.2, color: _accentColor),
+          pw.SizedBox(height: 10),
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Text(
-                'Generated: ${_formatDate(now)}',
-                style: pw.TextStyle(
-                  fontSize: 12,
-                  color: _lightTextColor,
-                ),
-              ),
-              pw.Text(
-                dateRange,
-                style: pw.TextStyle(
-                  fontSize: 12,
-                  color: _lightTextColor,
-                ),
-              ),
+              _buildHeaderMeta('Statement Period', dateRange),
+              _buildHeaderMeta('Generated On', _formatDate(now)),
+              _buildHeaderMeta('Currency', 'INR'),
             ],
           ),
-          pw.Divider(color: _accentColor, thickness: 2),
         ],
       ),
     );
   }
 
-  /// Build summary section
-  static pw.Widget _buildSummarySection(pw.Context context, Map<String, double> summary) {
+  static pw.Widget _buildHeaderMeta(String label, String value) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(label, style: pw.TextStyle(fontSize: 8, color: _lightTextColor)),
+        pw.SizedBox(height: 2),
+        pw.Text(value, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.black)),
+      ],
+    );
+  }
+
+  static pw.Widget _buildContinuationHeader(pw.Context context) {
     return pw.Container(
-      margin: const pw.EdgeInsets.only(bottom: 24),
+      margin: const pw.EdgeInsets.only(bottom: 12),
+      padding: const pw.EdgeInsets.only(bottom: 6),
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(bottom: pw.BorderSide(color: _borderColor, width: 0.75)),
+      ),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(_appName, style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: _primaryColor)),
+          pw.Text('Statement of Account (contd.)', style: pw.TextStyle(fontSize: 9, color: _lightTextColor)),
+        ],
+      ),
+    );
+  }
+
+  /// Account summary box: opening balance, credits, debits, closing balance.
+  static pw.Widget _buildSummarySection(
+      pw.Context context,
+      Map<String, double> summary,
+      double openingBalance,
+      double closingBalance,
+      ) {
+    return pw.Container(
+      margin: const pw.EdgeInsets.only(bottom: 20),
       padding: const pw.EdgeInsets.all(16),
       decoration: pw.BoxDecoration(
         color: _primaryColor,
-        borderRadius: pw.BorderRadius.circular(8),
+        borderRadius: pw.BorderRadius.circular(6),
       ),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           pw.Text(
-            'Financial Summary',
-            style: pw.TextStyle(
-              fontSize: 16,
-              fontWeight: pw.FontWeight.bold,
-              color: _textColor,
-            ),
+            'Account Summary',
+            style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: _textColor),
           ),
           pw.SizedBox(height: 12),
           pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              _buildSummaryItem('Total Credits', summary['credits'] ?? 0, PdfColors.green),
-              _buildSummaryItem('Total Debits', summary['debits'] ?? 0, PdfColors.red),
-              _buildSummaryItem('Balance', summary['balance'] ?? 0, PdfColors.blue),
+              _buildSummaryItem('Opening Balance', openingBalance, PdfColors.white),
+              _buildSummaryItem('Total Credits', summary['credits'] ?? 0, PdfColor.fromInt(0xFF6EE7A0)),
+              _buildSummaryItem('Total Debits', summary['debits'] ?? 0, PdfColor.fromInt(0xFFFF8A80)),
+              _buildSummaryItem('Closing Balance', closingBalance, PdfColors.white),
             ],
           ),
         ],
@@ -172,203 +247,63 @@ class PdfService {
     );
   }
 
-  /// Build summary item widget
   static pw.Widget _buildSummaryItem(String label, double amount, PdfColor color) {
     return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(
-          _formatCurrency(amount),
-          style: pw.TextStyle(
-            fontSize: 20,
-            fontWeight: pw.FontWeight.bold,
-            color: color,
-          ),
-        ),
+        pw.Text(label, style: pw.TextStyle(fontSize: 9, color: _lightTextColor)),
         pw.SizedBox(height: 4),
         pw.Text(
-          label,
-          style: pw.TextStyle(
-            fontSize: 12,
-            color: _textColor,
-          ),
+          _formatCurrency(amount),
+          style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold, color: color),
         ),
       ],
     );
   }
 
-  /// Build charts section
   static pw.Widget _buildChartsSection(pw.Context context, List<Transaction> transactions) {
     final expenseTransactions = transactions.where((t) => t.type == 'Debit').toList();
-    if (expenseTransactions.isEmpty) {
-      return pw.SizedBox.shrink();
-    }
+    if (expenseTransactions.isEmpty) return pw.SizedBox.shrink();
 
-    // Calculate category breakdown
     final categoryBreakdown = <String, double>{};
     for (final t in expenseTransactions) {
       categoryBreakdown[t.category] = (categoryBreakdown[t.category] ?? 0) + t.amount;
     }
+    final total = categoryBreakdown.values.fold(0.0, (a, b) => a + b);
+    final sortedEntries = categoryBreakdown.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
 
     return pw.Container(
-      margin: const pw.EdgeInsets.only(bottom: 24),
+      margin: const pw.EdgeInsets.only(bottom: 20),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           pw.Text(
-            'Expense Breakdown by Category',
-            style: pw.TextStyle(
-              fontSize: 16,
-              fontWeight: pw.FontWeight.bold,
-              color: _primaryColor,
-            ),
+            'Spend by Category',
+            style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: _primaryColor),
           ),
-          pw.SizedBox(height: 12),
+          pw.SizedBox(height: 10),
           pw.Table(
-            border: pw.TableBorder.all(color: PdfColors.grey300),
-            children: [
-              pw.TableRow(
-                decoration: const pw.BoxDecoration(color: PdfColors.grey100),
-                children: [
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.all(8),
-                    child: pw.Text('Category', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  ),
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.all(8),
-                    child: pw.Text('Amount', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  ),
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.all(8),
-                    child: pw.Text('Percentage', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  ),
-                ],
-              ),
-              ...categoryBreakdown.entries.map((entry) {
-                final percentage = (entry.value / (categoryBreakdown.values.fold(0.0, (a, b) => a + b))) * 100;
-                return pw.TableRow(
-                  children: [
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(8),
-                      child: pw.Text(entry.key),
-                    ),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(8),
-                      child: pw.Text(_formatCurrency(entry.value)),
-                    ),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(8),
-                      child: pw.Text('${percentage.toStringAsFixed(1)}%'),
-                    ),
-                  ],
-                );
-              }).toList(),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Build transactions table
-  static pw.Widget _buildTransactionsTable(pw.Context context, List<Transaction> transactions) {
-    return pw.Container(
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Text(
-            'Transaction Details',
-            style: pw.TextStyle(
-              fontSize: 16,
-              fontWeight: pw.FontWeight.bold,
-              color: _primaryColor,
+            border: const pw.TableBorder(
+              horizontalInside: pw.BorderSide(color: _borderColor, width: 0.5),
             ),
-          ),
-          pw.SizedBox(height: 12),
-          pw.Table(
-            border: pw.TableBorder.all(color: PdfColors.grey300),
-            columnWidths: {
-              0: const pw.FixedColumnWidth(80),  // Date
-              1: const pw.FlexColumnWidth(3),   // Description
-              2: const pw.FixedColumnWidth(80), // Category
-              3: const pw.FixedColumnWidth(80), // Amount
-              4: const pw.FixedColumnWidth(60), // Type
+            columnWidths: const {
+              0: pw.FlexColumnWidth(3),
+              1: pw.FlexColumnWidth(2),
+              2: pw.FlexColumnWidth(2),
             },
             children: [
-              pw.TableRow(
-                decoration: const pw.BoxDecoration(color: PdfColors.grey100),
-                children: [
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.all(8),
-                    child: pw.Text('Date', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  ),
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.all(8),
-                    child: pw.Text('Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  ),
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.all(8),
-                    child: pw.Text('Category', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  ),
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.all(8),
-                    child: pw.Text('Amount', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  ),
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.all(8),
-                    child: pw.Text('Type', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  ),
-                ],
-              ),
-              ...transactions.map((transaction) {
-                final isCredit = transaction.type == 'Credit';
+              _headerRow(['Category', 'Amount', 'Share']),
+              ...sortedEntries.map((entry) {
+                final percentage = total == 0 ? 0.0 : (entry.value / total) * 100;
                 return pw.TableRow(
                   children: [
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(8),
-                      child: pw.Text(
-                        _formatDate(transaction.date),
-                        style: pw.TextStyle(fontSize: 10),
-                      ),
-                    ),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(8),
-                      child: pw.Text(
-                        _sanitizeText(transaction.description),
-                        style: pw.TextStyle(fontSize: 10),
-                        maxLines: 2,
-                        overflow: pw.TextOverflow.clip,
-                      ),
-                    ),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(8),
-                      child: pw.Text(
-                        _sanitizeText(transaction.category),
-                        style: pw.TextStyle(fontSize: 10),
-                      ),
-                    ),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(8),
-                      child: pw.Text(
-                        _formatCurrency(transaction.amount),
-                        style: pw.TextStyle(
-                          fontSize: 10,
-                          color: isCredit ? PdfColors.green : PdfColors.red,
-                        ),
-                      ),
-                    ),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(8),
-                      child: pw.Text(
-                        transaction.type,
-                        style: pw.TextStyle(
-                          fontSize: 10,
-                          color: isCredit ? PdfColors.green : PdfColors.red,
-                        ),
-                      ),
-                    ),
+                    _cell(entry.key),
+                    _cell(_formatCurrency(entry.value)),
+                    _cell('${percentage.toStringAsFixed(1)}%'),
                   ],
                 );
-              }).toList(),
+              }),
             ],
           ),
         ],
@@ -376,47 +311,124 @@ class PdfService {
     );
   }
 
-  /// Build footer
+  /// Transaction ledger with running balance — the core "bank statement" feel.
+  static List<pw.Widget> _buildTransactionsTable(pw.Context context, List<_StatementLine> lines) {
+    return [
+      pw.Text(
+        'Transaction History',
+        style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: _primaryColor),
+      ),
+      pw.SizedBox(height: 10),
+      pw.Table(
+        border: const pw.TableBorder(
+          horizontalInside: pw.BorderSide(color: _borderColor, width: 0.5),
+          top: pw.BorderSide(color: _borderColor, width: 0.75),
+          bottom: pw.BorderSide(color: _borderColor, width: 0.75),
+        ),
+        columnWidths: const {
+          0: pw.FixedColumnWidth(62), // Date
+          1: pw.FlexColumnWidth(3), // Description
+          2: pw.FixedColumnWidth(70), // Category
+          3: pw.FixedColumnWidth(68), // Debit
+          4: pw.FixedColumnWidth(68), // Credit
+          5: pw.FixedColumnWidth(72), // Balance
+        },
+        children: [
+          _headerRow(['Date', 'Description', 'Category', 'Debit', 'Credit', 'Balance']),
+          ...lines.map((line) {
+            final t = line.transaction;
+            final isCredit = t.type == 'Credit';
+            return pw.TableRow(
+              children: [
+                _cell(_formatDate(t.date)),
+                _cell(t.description, maxLines: 2),
+                _cell(t.category),
+                _cell(isCredit ? '-' : _formatCurrency(t.amount), color: isCredit ? _lightTextColor : PdfColors.red800),
+                _cell(isCredit ? _formatCurrency(t.amount) : '-', color: isCredit ? PdfColors.green800 : _lightTextColor),
+                _cell(_formatCurrency(line.runningBalance), bold: true),
+              ],
+            );
+          }),
+        ],
+      ),
+      if (lines.isEmpty)
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(vertical: 20),
+          child: pw.Center(
+            child: pw.Text('No transactions in this period.', style: pw.TextStyle(fontSize: 10, color: _lightTextColor)),
+          ),
+        ),
+    ];
+  }
+
+  static pw.TableRow _headerRow(List<String> labels) {
+    return pw.TableRow(
+      decoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFF3F3F3)),
+      children: labels
+          .map((l) => pw.Padding(
+        padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+        child: pw.Text(l, style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: _primaryColor)),
+      ))
+          .toList(),
+    );
+  }
+
+  static pw.Widget _cell(String text, {int maxLines = 1, PdfColor? color, bool bold = false}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 7, horizontal: 6),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontSize: 9,
+          color: color ?? PdfColors.black,
+          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+        ),
+        maxLines: maxLines,
+        overflow: pw.TextOverflow.clip,
+      ),
+    );
+  }
+
+  /// Footer with page numbers and a bank-style disclaimer.
   static pw.Widget _buildFooter(pw.Context context) {
     return pw.Container(
-      margin: const pw.EdgeInsets.only(top: 24),
-      child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.center,
+      margin: const pw.EdgeInsets.only(top: 16),
+      padding: const pw.EdgeInsets.only(top: 8),
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(top: pw.BorderSide(color: _borderColor, width: 0.75)),
+      ),
+      child: pw.Column(
         children: [
           pw.Text(
-            'Generated by Vaultic App - ${DateTime.now().year}',
-            style: pw.TextStyle(
-              fontSize: 10,
-              color: _lightTextColor,
-            ),
+            'This is a system-generated statement from $_appName and does not require a signature.',
+            style: pw.TextStyle(fontSize: 7.5, color: _lightTextColor),
+            textAlign: pw.TextAlign.center,
+          ),
+          pw.SizedBox(height: 4),
+          pw.Text(
+            'Page ${context.pageNumber} of ${context.pagesCount}',
+            style: pw.TextStyle(fontSize: 7.5, color: _lightTextColor),
           ),
         ],
       ),
     );
   }
 
-  /// Calculate summary statistics
-  static Future<Map<String, double>> _calculateSummary(List<Transaction> transactions) async {
-    final totalCredits = transactions
-        .where((t) => t.type == 'Credit')
-        .fold(0.0, (sum, t) => sum + t.amount);
-
-    final totalDebits = transactions
-        .where((t) => t.type == 'Debit')
-        .fold(0.0, (sum, t) => sum + t.amount);
-
-    // Get initial balance and calculate actual balance
-    final initialBalance = await HybridStorageService.getInitialBalance();
-    final balance = initialBalance + totalCredits - totalDebits;
-
+  static Map<String, double> _calculateSummary(
+      List<Transaction> transactions,
+      double openingBalance,
+      double closingBalance,
+      ) {
+    final totalCredits = transactions.where((t) => t.type == 'Credit').fold(0.0, (sum, t) => sum + t.amount);
+    final totalDebits = transactions.where((t) => t.type == 'Debit').fold(0.0, (sum, t) => sum + t.amount);
     return {
       'credits': totalCredits,
       'debits': totalDebits,
-      'balance': balance,
+      'opening': openingBalance,
+      'closing': closingBalance,
     };
   }
 
-  /// Convert map to Transaction object
   static Transaction _transactionFromMap(Map<String, dynamic> m) {
     return Transaction(
       transactionId: (m['transactionId'] ?? m['transaction_id'] ?? '').toString(),
@@ -429,78 +441,76 @@ class PdfService {
     );
   }
 
-  /// Format date for display
   static String _formatDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
 
-  /// Format date range for display
   static String _formatDateRange(DateTime? startDate, DateTime? endDate) {
-    if (startDate == null && endDate == null) {
-      return 'All Transactions';
-    } else if (startDate == null) {
-      return 'Up to ${_formatDate(endDate!)}';
-    } else if (endDate == null) {
-      return 'From ${_formatDate(startDate)}';
-    } else {
-      return '${_formatDate(startDate)} - ${_formatDate(endDate)}';
-    }
+    if (startDate == null && endDate == null) return 'All Transactions';
+    if (startDate == null) return 'Up to ${_formatDate(endDate!)}';
+    if (endDate == null) return 'From ${_formatDate(startDate)}';
+    return '${_formatDate(startDate)} - ${_formatDate(endDate)}';
   }
 
-
-  /// Save PDF to device
-  static Future<String?> savePdfToDevice(Uint8List pdfBytes, String fileName) async {
+  /// Save PDF to device. Debug logging is gated behind [verbose] so it
+  /// doesn't spam release logs.
+  /// On iOS: Uses getApplicationDocumentsDirectory() (exposed via Files app).
+  /// On Android: Targets user-visible Downloads directory (/storage/emulated/0/Download or getDownloadsDirectory()).
+  static Future<String?> savePdfToDevice(
+      Uint8List pdfBytes,
+      String fileName, {
+        bool verbose = false,
+      }) async {
     try {
-      print('=== PDF SAVE DEBUG START ===');
-      print('PDF bytes length: ${pdfBytes.length}');
-      print('File name: $fileName');
-      
-      // For iOS Simulator, always use documents directory
-      final directory = await getApplicationDocumentsDirectory();
-      print('Documents directory: ${directory.path}');
-      
-      if (directory == null) {
-        print('ERROR: No suitable directory available');
-        throw Exception('No suitable directory available');
+      Directory? directory;
+
+      if (Platform.isAndroid) {
+        // Try standard Android public Downloads directory first
+        final downloadDir = Directory('/storage/emulated/0/Download');
+        if (await downloadDir.exists()) {
+          directory = downloadDir;
+        } else {
+          try {
+            directory = await getDownloadsDirectory();
+          } catch (_) {}
+
+          if (directory == null || !await directory.exists()) {
+            final docsDir = Directory('/storage/emulated/0/Documents');
+            if (await docsDir.exists()) {
+              directory = docsDir;
+            } else {
+              directory = await getExternalStorageDirectory();
+            }
+          }
+        }
+      } else if (Platform.isIOS) {
+        // On iOS, getApplicationDocumentsDirectory() is rendered in Files app
+        // under "On My iPhone > Vaultic" via Info.plist keys
+        directory = await getApplicationDocumentsDirectory();
+      } else {
+        directory = await getApplicationDocumentsDirectory();
       }
 
-      // Create the directory if it doesn't exist
+      directory ??= await getApplicationDocumentsDirectory();
+
       if (!await directory.exists()) {
-        print('Directory does not exist, creating...');
         await directory.create(recursive: true);
-        print('Directory created successfully');
-      } else {
-        print('Directory already exists');
       }
 
-      // Create file
       final filePath = '${directory.path}/$fileName.pdf';
-      print('Full file path: $filePath');
-      
       final file = File(filePath);
-      print('File object created, writing bytes...');
-      
       await file.writeAsBytes(pdfBytes);
-      print('File written successfully');
-      
-      // Verify file exists
-      if (await file.exists()) {
-        final fileSize = await file.length();
-        print('File exists, size: $fileSize bytes');
-      } else {
-        print('ERROR: File does not exist after writing');
+
+      if (!await file.exists()) {
+        if (verbose) print('ERROR: File does not exist after writing to $filePath');
         return null;
       }
-      
-      print('=== PDF SAVE DEBUG END ===');
+
+      if (verbose) print('PDF saved: $filePath (${pdfBytes.length} bytes)');
       return file.path;
     } catch (e) {
-      print('=== PDF SAVE ERROR ===');
-      print('Error saving PDF: $e');
-      print('Error type: ${e.runtimeType}');
-      print('=== END ERROR ===');
+      if (verbose) print('Error saving PDF: $e (${e.runtimeType})');
       return null;
     }
   }
-
 }

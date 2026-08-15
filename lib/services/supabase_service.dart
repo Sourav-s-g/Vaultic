@@ -68,8 +68,8 @@ class SupabaseService {
   }
 
   static Future<void> saveCategories(
-    List<Map<String, dynamic>> categories,
-  ) async {
+      List<Map<String, dynamic>> categories,
+      ) async {
     if (!_isSessionValid() || userId == null) return;
     for (final category in categories) {
       await addCategory(category);
@@ -123,8 +123,8 @@ class SupabaseService {
   }
 
   static Future<void> saveTransactions(
-    List<Map<String, dynamic>> transactions,
-  ) async {
+      List<Map<String, dynamic>> transactions,
+      ) async {
     if (!_isSessionValid() || userId == null) return;
     for (final transaction in transactions) {
       await addTransaction(transaction);
@@ -169,9 +169,9 @@ class SupabaseService {
   }
 
   static Future<void> updateTransaction(
-    String transactionId,
-    Map<String, dynamic> updates,
-  ) async {
+      String transactionId,
+      Map<String, dynamic> updates,
+      ) async {
     if (!_isSessionValid() || userId == null) return;
     try {
       // Map camelCase to snake_case for Supabase if necessary
@@ -179,7 +179,7 @@ class SupabaseService {
       if (mappedUpdates.containsKey('transactionId')) {
         mappedUpdates['transaction_id'] = mappedUpdates.remove('transactionId');
       }
-      
+
       await _client
           .from('transactions')
           .update(mappedUpdates)
@@ -348,12 +348,17 @@ class SupabaseService {
           .select('initial_balance')
           .eq('user_id', userId!)
           .maybeSingle();
-      
+
       if (response != null && response['initial_balance'] != null) {
         return (response['initial_balance'] as num).toDouble();
       }
       return null;
     } catch (e) {
+      // PGRST205 means the 'user_settings' table doesn't exist in Supabase.
+      // We catch this specifically to avoid noisy errors.
+      if (e.toString().contains('PGRST205')) {
+        return null;
+      }
       print('Error fetching initial balance: $e');
       return null;
     }
@@ -368,7 +373,130 @@ class SupabaseService {
         'updated_at': DateTime.now().toIso8601String(),
       });
     } catch (e) {
+      if (e.toString().contains('PGRST205')) {
+        print('Cloud sync skipped: user_settings table does not exist in Supabase.');
+        return;
+      }
       print('Error saving initial balance: $e');
+      rethrow;
+    }
+  }
+
+  // Trips Sync
+  static Future<List<Map<String, dynamic>>> getTrips() async {
+    if (!_isSessionValid() || userId == null) return [];
+    try {
+      final response = await _client
+          .from('trips')
+          .select()
+          .eq('user_id', userId!)
+          .order('created_at', ascending: false);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      if (e.toString().contains('PGRST205') || e.toString().contains('42P01')) {
+        return [];
+      }
+      print('Error fetching trips: $e');
+      return [];
+    }
+  }
+
+  static Future<void> addTrip(Map<String, dynamic> tripData) async {
+    if (!_isSessionValid() || userId == null) return;
+    try {
+      final data = {
+        'user_id': userId!,
+        'trip_id': tripData['tripId'],
+        'name': tripData['name'],
+        'categories': tripData['categories'],
+        'created_at': tripData['createdAt'],
+        'start_date': tripData['startDate'],
+        'end_date': tripData['endDate'],
+        'description': tripData['description'],
+        'budget': tripData['budget'],
+        'category_budgets': tripData['categoryBudgets'],
+      };
+      // NOTE: trip_id is the PRIMARY KEY on the trips table (see schema),
+      // so the conflict target must be exactly 'trip_id'. Using
+      // 'user_id, trip_id' here throws 42P10 (no matching unique
+      // constraint) because no such composite constraint exists.
+      await _client.from('trips').upsert(data, onConflict: 'trip_id');
+    } catch (e) {
+      if (e.toString().contains('PGRST205') || e.toString().contains('42P01')) {
+        print('Cloud sync skipped: trips table does not exist in Supabase.');
+        return;
+      }
+      print('Error adding/updating trip: $e');
+      rethrow;
+    }
+  }
+
+  static Future<void> deleteTrip(String tripId) async {
+    if (!_isSessionValid() || userId == null) return;
+    try {
+      await _client
+          .from('trips')
+          .delete()
+          .eq('user_id', userId!)
+          .eq('trip_id', tripId);
+    } catch (e) {
+      if (e.toString().contains('PGRST205') || e.toString().contains('42P01')) {
+        return;
+      }
+      print('Error deleting trip: $e');
+      rethrow;
+    }
+  }
+
+  // Trip Transactions Sync
+  static Future<List<Map<String, dynamic>>> getTripTransactions(String tripId) async {
+    if (!_isSessionValid() || userId == null) return [];
+    try {
+      final response = await _client
+          .from('trip_transactions')
+          .select()
+          .eq('user_id', userId!)
+          .eq('trip_id', tripId);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      if (e.toString().contains('PGRST205') || e.toString().contains('42P01')) {
+        return [];
+      }
+      print('Error fetching trip transactions: $e');
+      return [];
+    }
+  }
+
+  static Future<void> saveTripTransactions(String tripId, List<Map<String, dynamic>> transactions) async {
+    if (!_isSessionValid() || userId == null) return;
+    try {
+      await _client
+          .from('trip_transactions')
+          .delete()
+          .eq('user_id', userId!)
+          .eq('trip_id', tripId);
+
+      if (transactions.isEmpty) return;
+
+      final dataList = transactions.map((t) => {
+        'user_id': userId!,
+        'trip_id': tripId,
+        'transaction_id': (t['transactionId'] ?? t['transaction_id'] ?? '').toString(),
+        'description': t['description'] ?? '',
+        'amount': t['amount'] ?? 0.0,
+        'type': t['type'] ?? 'Debit',
+        'date': t['date'] ?? DateTime.now().toIso8601String(),
+        'category': t['category'] ?? '',
+        'status': t['status'] ?? 'Completed',
+      }).toList();
+
+      await _client.from('trip_transactions').insert(dataList);
+    } catch (e) {
+      if (e.toString().contains('PGRST205') || e.toString().contains('42P01')) {
+        print('Cloud sync skipped: trip_transactions table does not exist in Supabase.');
+        return;
+      }
+      print('Error saving trip transactions: $e');
       rethrow;
     }
   }

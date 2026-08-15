@@ -875,11 +875,11 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
         final now = DateTime.now();
         final byMonth = <String, double>{};
         for (final t in txns) {
-          if (t.type != 'Debit') continue;
           if (t.date.year == now.year && t.date.month == now.month) continue;
           final key =
               '${t.date.year}-${t.date.month.toString().padLeft(2, '0')}';
-          byMonth[key] = (byMonth[key] ?? 0) + t.amount;
+          final amount = t.type == 'Credit' ? t.amount : -t.amount;
+          byMonth[key] = (byMonth[key] ?? 0) + amount;
         }
         if (byMonth.isEmpty) {
           return Container(
@@ -911,6 +911,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
         return ListView(
           children:
               entries.map((e) {
+                final isPositive = e.value >= 0;
                 return GestureDetector(
                   onTap: () => _showMonthDetailsDialog(e.key, txns),
                   child: Container(
@@ -933,9 +934,9 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                           ),
                         ),
                         Text(
-                          '₹${e.value.toStringAsFixed(0)}',
+                          '${isPositive ? "+" : "-"}₹${e.value.abs().toStringAsFixed(0)}',
                           style: GoogleFonts.nunito(
-                            color: Colors.redAccent,
+                            color: isPositive ? Colors.greenAccent : Colors.redAccent,
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
@@ -1337,16 +1338,19 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
     
     // Filter transactions for this month
     final monthTransactions = allTransactions.where((t) {
-      return t.date.year == year && t.date.month == month && t.type == 'Debit';
+      return t.date.year == year && t.date.month == month;
     }).toList();
     
-    // Calculate total expense
-    final totalExpense = monthTransactions.fold(0.0, (sum, t) => sum + t.amount);
+    // Calculate total income and expense
+    final totalIncome = monthTransactions.where((t) => t.type == 'Credit').fold(0.0, (sum, t) => sum + t.amount);
+    final totalExpense = monthTransactions.where((t) => t.type == 'Debit').fold(0.0, (sum, t) => sum + t.amount);
+    final netSavings = totalIncome - totalExpense;
     
     // Group by category and calculate daily averages
     final categoryData = <String, Map<String, dynamic>>{};
     
     for (final t in monthTransactions) {
+      if (t.type != 'Debit') continue;
       if (!categoryData.containsKey(t.category)) {
         categoryData[t.category] = {
           'total': 0.0,
@@ -1372,11 +1376,6 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
       };
     }
     
-    // Calculate overall average expense per category
-    final avgExpense = categoryExpenses.isNotEmpty 
-        ? totalExpense / categoryExpenses.length 
-        : 0.0;
-    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1391,152 +1390,148 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
         ),
         content: SizedBox(
           width: double.maxFinite,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Total Expense
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.withOpacity(0.3)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Income & Expense Summary
+                Row(
                   children: [
-                    Text(
-                      'Total Expense',
-                      style: GoogleFonts.nunito(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.green.withOpacity(0.3)),
+                        ),
+                        child: Column(
+                          children: [
+                            Text('Income', style: GoogleFonts.nunito(color: Colors.white70, fontSize: 12)),
+                            Text('₹${totalIncome.toStringAsFixed(0)}', style: GoogleFonts.nunito(color: Colors.green, fontSize: 16, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
                       ),
                     ),
-                    Text(
-                      '₹${totalExpense.toStringAsFixed(0)}',
-                      style: GoogleFonts.nunito(
-                        color: Colors.red,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.red.withOpacity(0.3)),
+                        ),
+                        child: Column(
+                          children: [
+                            Text('Expense', style: GoogleFonts.nunito(color: Colors.white70, fontSize: 12)),
+                            Text('₹${totalExpense.toStringAsFixed(0)}', style: GoogleFonts.nunito(color: Colors.red, fontSize: 16, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
                       ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 16),
-              
-              // Category Breakdown
-              Text(
-                'Category Breakdown',
-                style: GoogleFonts.nunito(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 8),
-              
-              // Category List
-              ...categoryExpenses.entries.map((entry) {
-                final categoryData = entry.value;
-                final total = categoryData['total']!;
-                final avgPerDay = categoryData['avgPerDay']!;
-                final daysUsed = categoryData['daysUsed']!.toInt();
-                final percentage = totalExpense > 0 ? (total / totalExpense * 100) : 0;
+                const SizedBox(height: 12),
                 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
+                // Net Savings
+                Container(
+                  width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
+                    color: (netSavings >= 0 ? Colors.green : Colors.red).withOpacity(0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              entry.key,
-                              style: GoogleFonts.nunito(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            '₹${total.toStringAsFixed(0)} (${percentage.toStringAsFixed(1)}%)',
-                            style: GoogleFonts.nunito(
-                              color: Colors.white70,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Avg/day: ₹${avgPerDay.toStringAsFixed(0)}',
-                            style: GoogleFonts.nunito(
-                              color: Colors.green,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          Text(
-                            'Used $daysUsed days',
-                            style: GoogleFonts.nunito(
-                              color: Colors.white60,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
+                      Text(netSavings >= 0 ? 'Net Savings' : 'Overspent', style: GoogleFonts.nunito(color: Colors.white, fontWeight: FontWeight.bold)),
+                      Text('${netSavings >= 0 ? "+" : "-"}₹${netSavings.abs().toStringAsFixed(0)}', style: GoogleFonts.nunito(color: netSavings >= 0 ? Colors.greenAccent : Colors.redAccent, fontSize: 18, fontWeight: FontWeight.bold)),
                     ],
                   ),
-                );
-              }).toList(),
-              
-              const SizedBox(height: 16),
-              
-              // Average Expense
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green.withOpacity(0.3)),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Average per Category',
-                      style: GoogleFonts.nunito(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
+                const SizedBox(height: 20),
+                
+                if (categoryExpenses.isNotEmpty) ...[
+                  Text(
+                    'Expense Breakdown',
+                    style: GoogleFonts.nunito(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
                     ),
-                    Text(
-                      '₹${avgExpense.toStringAsFixed(0)}',
-                      style: GoogleFonts.nunito(
-                        color: Colors.green,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  // Category List
+                  ...categoryExpenses.entries.map((entry) {
+                    final categoryData = entry.value;
+                    final total = categoryData['total']!;
+                    final avgPerDay = categoryData['avgPerDay']!;
+                    final daysUsed = categoryData['daysUsed']!.toInt();
+                    final percentage = totalExpense > 0 ? (total / totalExpense * 100) : 0;
+                    
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  entry.key,
+                                  style: GoogleFonts.nunito(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                '₹${total.toStringAsFixed(0)} (${percentage.toStringAsFixed(1)}%)',
+                                style: GoogleFonts.nunito(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Avg/day: ₹${avgPerDay.toStringAsFixed(0)}',
+                                style: GoogleFonts.nunito(
+                                  color: Colors.green,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              Text(
+                                'Used $daysUsed days',
+                                style: GoogleFonts.nunito(
+                                  color: Colors.white60,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ],
+              ],
+            ),
           ),
         ),
         actions: [

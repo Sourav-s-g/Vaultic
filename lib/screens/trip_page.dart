@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../models/trip.dart';
 import '../models/transaction_history_model.dart';
 import '../services/trip_storage_service.dart';
+import '../services/hybrid_storage_service.dart';
 
 class TripPage extends StatefulWidget {
   final Trip trip;
@@ -20,10 +21,12 @@ class _TripPageState extends State<TripPage> {
   int _currentPage = 0;
   static const int _pageSize = 20;
   bool _hasMoreData = true;
+  late Trip _currentTrip;
 
   @override
   void initState() {
     super.initState();
+    _currentTrip = widget.trip;
     _loadTransactions();
   }
 
@@ -38,7 +41,7 @@ class _TripPageState extends State<TripPage> {
     }
 
     try {
-      final raw = await TripStorageService.getTripTransactions(widget.trip.tripId);
+      final raw = await TripStorageService.getTripTransactions(_currentTrip.tripId);
       final allTxns = raw.map((m) => _transactionFromMap(m)).toList();
       allTxns.sort((a, b) => b.date.compareTo(a.date));
 
@@ -109,7 +112,7 @@ class _TripPageState extends State<TripPage> {
                 onPressed: () => Navigator.pop(context),
               ),
               title: Text(
-                widget.trip.name,
+                _currentTrip.name,
                 style: GoogleFonts.nunito(
                   color: Colors.white,
                   fontSize: 28,
@@ -154,12 +157,12 @@ class _TripPageState extends State<TripPage> {
             icon: Icons.payments,
             color: Colors.red,
             onTap: () => _showTripAnalytics(),
-            budget: widget.trip.budget,
+            budget: _currentTrip.budget,
             spent: _getTotalSpent(),
           ),
-          ...widget.trip.categories.map((category) {
+          ..._currentTrip.categories.map((category) {
             final amount = _getCategoryTotal(category);
-            final categoryBudget = widget.trip.categoryBudgets?[category];
+            final categoryBudget = _currentTrip.categoryBudgets?[category];
             return _buildCategoryCard(
               title: category,
               amount: '₹${amount.toStringAsFixed(0)}',
@@ -187,7 +190,7 @@ class _TripPageState extends State<TripPage> {
     final hasBudget = budget != null && budget > 0;
     final progress = hasBudget ? (spent ?? 0) / budget : 0.0;
     final isOverBudget = progress > 1.0;
-    
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -285,13 +288,13 @@ class _TripPageState extends State<TripPage> {
           Expanded(
             child: _isLoading && _transactions.isEmpty
                 ? const Center(
-                    child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
-                    ),
-                  )
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
+              ),
+            )
                 : _transactions.isEmpty
-                    ? _buildEmptyTransactionsWidget()
-                    : _buildTransactionList(),
+                ? _buildEmptyTransactionsWidget()
+                : _buildTransactionList(),
           ),
         ],
       ),
@@ -309,16 +312,16 @@ class _TripPageState extends State<TripPage> {
           return Container(
             margin: const EdgeInsets.symmetric(vertical: 16),
             child: Center(
-              child: _isLoading 
-                ? const CircularProgressIndicator(color: Colors.green)
-                : ElevatedButton(
-                    onPressed: _loadMoreTransactions,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                    ),
-                    child: const Text('Load More'),
-                  ),
+              child: _isLoading
+                  ? const CircularProgressIndicator(color: Colors.green)
+                  : ElevatedButton(
+                onPressed: _loadMoreTransactions,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Load More'),
+              ),
             ),
           );
         }
@@ -455,14 +458,14 @@ class _TripPageState extends State<TripPage> {
   void _showAddTransactionDialog() {
     final descriptionController = TextEditingController();
     final amountController = TextEditingController();
-    String selectedCategory = widget.trip.categories.first;
+    String selectedCategory = _currentTrip.categories.first;
     String selectedType = 'Debit';
     DateTime selectedDate = DateTime.now();
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) => AlertDialog(
           backgroundColor: const Color(0xFF1A1A1A),
           title: Text(
             'Add Transaction',
@@ -514,7 +517,7 @@ class _TripPageState extends State<TripPage> {
                 GestureDetector(
                   onTap: () async {
                     final date = await showDatePicker(
-                      context: context,
+                      context: dialogContext,
                       initialDate: selectedDate,
                       firstDate: DateTime(2020),
                       lastDate: DateTime.now(),
@@ -532,6 +535,9 @@ class _TripPageState extends State<TripPage> {
                         );
                       },
                     );
+                    // Guard against the dialog being dismissed while the
+                    // date picker await was pending.
+                    if (!dialogContext.mounted) return;
                     if (date != null) {
                       setState(() {
                         selectedDate = date;
@@ -573,7 +579,7 @@ class _TripPageState extends State<TripPage> {
                       borderSide: const BorderSide(color: Colors.green),
                     ),
                   ),
-                  items: widget.trip.categories.map((category) {
+                  items: _currentTrip.categories.map((category) {
                     return DropdownMenuItem(
                       value: category,
                       child: Text(category),
@@ -619,7 +625,7 @@ class _TripPageState extends State<TripPage> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
             ),
             TextButton(
@@ -629,12 +635,12 @@ class _TripPageState extends State<TripPage> {
                 if (desc.isEmpty || amountText.isEmpty) {
                   return;
                 }
-                
+
                 final amount = double.tryParse(amountText);
                 if (amount == null || amount <= 0) {
                   return;
                 }
-                
+
                 final transaction = {
                   'transactionId': const Uuid().v4(),
                   'description': desc,
@@ -646,10 +652,13 @@ class _TripPageState extends State<TripPage> {
                   'isSplit': false,
                   'splitCount': 1,
                 };
-                
-                await TripStorageService.addTripTransaction(widget.trip.tripId, transaction);
+
+                await TripStorageService.addTripTransaction(_currentTrip.tripId, transaction);
+                // Guard the DIALOG's context, not just the page's `mounted`,
+                // since the dialog can be dismissed while this await is pending.
+                if (!dialogContext.mounted) return;
+                Navigator.of(dialogContext).pop();
                 if (!mounted) return;
-                Navigator.of(context).pop();
                 await _loadTransactions();
               },
               child: const Text('Add', style: TextStyle(color: Colors.green)),
@@ -669,8 +678,8 @@ class _TripPageState extends State<TripPage> {
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) => AlertDialog(
           backgroundColor: const Color(0xFF1A1A1A),
           title: Text(
             'Edit Transaction',
@@ -722,7 +731,7 @@ class _TripPageState extends State<TripPage> {
                 GestureDetector(
                   onTap: () async {
                     final date = await showDatePicker(
-                      context: context,
+                      context: dialogContext,
                       initialDate: selectedDate,
                       firstDate: DateTime(2020),
                       lastDate: DateTime.now(),
@@ -740,6 +749,7 @@ class _TripPageState extends State<TripPage> {
                         );
                       },
                     );
+                    if (!dialogContext.mounted) return;
                     if (date != null) {
                       setState(() {
                         selectedDate = date;
@@ -781,7 +791,7 @@ class _TripPageState extends State<TripPage> {
                       borderSide: const BorderSide(color: Colors.green),
                     ),
                   ),
-                  items: widget.trip.categories.map((category) {
+                  items: _currentTrip.categories.map((category) {
                     return DropdownMenuItem(
                       value: category,
                       child: Text(category),
@@ -827,7 +837,7 @@ class _TripPageState extends State<TripPage> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
             ),
             TextButton(
@@ -835,10 +845,10 @@ class _TripPageState extends State<TripPage> {
                 final amountText = amountController.text.trim();
                 final desc = descriptionController.text.trim();
                 if (desc.isEmpty || amountText.isEmpty) return;
-                
+
                 final amount = double.tryParse(amountText);
                 if (amount == null || amount <= 0) return;
-                
+
                 final updatedTransaction = {
                   'transactionId': transaction.transactionId,
                   'description': desc,
@@ -850,11 +860,13 @@ class _TripPageState extends State<TripPage> {
                   'isSplit': false,
                   'splitCount': 1,
                 };
-                
-                await TripStorageService.deleteTripTransaction(widget.trip.tripId, transaction.transactionId);
-                await TripStorageService.addTripTransaction(widget.trip.tripId, updatedTransaction);
+
+                await TripStorageService.deleteTripTransaction(_currentTrip.tripId, transaction.transactionId);
+                await TripStorageService.addTripTransaction(_currentTrip.tripId, updatedTransaction);
+                // Guard the DIALOG's context before popping/using it further.
+                if (!dialogContext.mounted) return;
+                Navigator.of(dialogContext).pop();
                 if (!mounted) return;
-                Navigator.of(context).pop();
                 await _loadTransactions();
               },
               child: const Text('Update', style: TextStyle(color: Colors.green)),
@@ -868,7 +880,7 @@ class _TripPageState extends State<TripPage> {
   void _showDeleteTransactionConfirmation(Transaction transaction) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
         title: Text(
           'Delete Transaction',
@@ -884,14 +896,15 @@ class _TripPageState extends State<TripPage> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
           ),
           TextButton(
             onPressed: () async {
-              await TripStorageService.deleteTripTransaction(widget.trip.tripId, transaction.transactionId);
+              await TripStorageService.deleteTripTransaction(_currentTrip.tripId, transaction.transactionId);
+              if (!dialogContext.mounted) return;
+              Navigator.of(dialogContext).pop();
               if (!mounted) return;
-              Navigator.of(context).pop();
               await _loadTransactions();
             },
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
@@ -903,7 +916,7 @@ class _TripPageState extends State<TripPage> {
 
   void _showCategoryTransactions(String category) {
     final categoryTransactions = _transactions.where((t) => t.category == category && t.type == 'Debit').toList();
-    
+
     if (categoryTransactions.isEmpty) {
       showDialog(
         context: context,
@@ -918,13 +931,13 @@ class _TripPageState extends State<TripPage> {
       );
       return;
     }
-    
+
     final totalSpent = categoryTransactions.fold(0.0, (sum, t) => sum + t.amount);
     final daysUsed = categoryTransactions.map((t) => t.date.day).toSet().length;
     final avgPerDay = daysUsed > 0 ? totalSpent / daysUsed : 0.0;
-    final categoryBudget = widget.trip.categoryBudgets?[category];
+    final categoryBudget = _currentTrip.categoryBudgets?[category];
     final isOverBudget = categoryBudget != null && totalSpent > categoryBudget;
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1002,7 +1015,7 @@ class _TripPageState extends State<TripPage> {
   void _showTripAnalytics() {
     final totalSpent = _getTotalSpent();
     final categoryData = <String, Map<String, dynamic>>{};
-    
+
     for (final t in _transactions) {
       if (t.type != 'Debit') continue;
       if (!categoryData.containsKey(t.category)) {
@@ -1011,27 +1024,27 @@ class _TripPageState extends State<TripPage> {
       categoryData[t.category]!['total'] += t.amount;
       categoryData[t.category]!['days'].add(t.date.day);
     }
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
-        title: Text('${widget.trip.name} Analytics', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: Text('${_currentTrip.name} Analytics', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               _analyticsCard('Total Trip Spent', '₹${totalSpent.toStringAsFixed(0)}', Colors.red),
-              if (widget.trip.budget != null && widget.trip.budget! > 0) ...[
+              if (_currentTrip.budget != null && _currentTrip.budget! > 0) ...[
                 const SizedBox(height: 12),
-                _budgetCard(totalSpent, widget.trip.budget!, totalSpent > widget.trip.budget!),
+                _budgetCard(totalSpent, _currentTrip.budget!, totalSpent > _currentTrip.budget!),
               ],
               const SizedBox(height: 20),
               const Text('Category Breakdown', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
               ...categoryData.entries.map((e) {
                 final total = e.value['total'] as double;
-                final budget = widget.trip.categoryBudgets?[e.key];
+                final budget = _currentTrip.categoryBudgets?[e.key];
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.all(12),
@@ -1069,6 +1082,7 @@ class _TripPageState extends State<TripPage> {
               title: const Text('Edit Trip', style: TextStyle(color: Colors.white)),
               onTap: () {
                 Navigator.pop(context);
+                _showEditTripDialog();
               },
             ),
             ListTile(
@@ -1085,20 +1099,196 @@ class _TripPageState extends State<TripPage> {
     );
   }
 
+  void _showEditTripDialog() async {
+    final nameController = TextEditingController(text: _currentTrip.name);
+    final budgetController = TextEditingController(text: _currentTrip.budget?.toString() ?? '');
+
+    // Fetch all categories from local storage to display as selection
+    final List<Map<String, dynamic>> allCatsMap = await HybridStorageService.getCategories();
+    if (!mounted) return;
+    final List<String> allCats = allCatsMap.map((c) => (c['name'] ?? '').toString()).where((n) => n.isNotEmpty).toList();
+
+    // Default categories if empty
+    if (allCats.isEmpty) {
+      allCats.addAll(['Food', 'Travel', 'Shopping', 'Entertainment', 'Others']);
+    }
+
+    final selectedCats = Set<String>.from(_currentTrip.categories);
+    bool isSaving = false;
+
+    showDialog(
+      context: context,
+      // Prevent the user from tapping outside to dismiss the dialog while
+      // a save is in flight — this was the source of the
+      // "setState() called after dispose()" crash, since the inner
+      // StatefulBuilder could be torn down mid-await and then still get
+      // a setState call afterwards.
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          scrollable: true,
+          title: Text(
+            'Edit Trip',
+            style: GoogleFonts.nunito(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Trip Name
+                Text(
+                  'Trip Name',
+                  style: GoogleFonts.nunito(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: nameController,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: const Color(0xFF242424),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Total Budget
+                Text(
+                  'Total Budget (Optional)',
+                  style: GoogleFonts.nunito(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: budgetController,
+                  keyboardType: TextInputType.number,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: const Color(0xFF242424),
+                    hintText: 'No budget set',
+                    hintStyle: const TextStyle(color: Colors.white38),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Categories
+                Text(
+                  'Trip Categories',
+                  style: GoogleFonts.nunito(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                Column(
+                  children: allCats.map((cat) {
+                    final isSelected = selectedCats.contains(cat);
+                    return CheckboxListTile(
+                      title: Text(cat, style: const TextStyle(color: Colors.white, fontSize: 13)),
+                      value: isSelected,
+                      activeColor: Colors.green,
+                      contentPadding: EdgeInsets.zero,
+                      // Disable interaction while saving, and guard setState
+                      // in case the dialog is mid-teardown.
+                      onChanged: isSaving
+                          ? null
+                          : (val) {
+                        if (!dialogContext.mounted) return;
+                        setState(() {
+                          if (val == true) {
+                            selectedCats.add(cat);
+                          } else {
+                            // Don't allow removing all categories
+                            if (selectedCats.length > 1) {
+                              selectedCats.remove(cat);
+                            }
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSaving ? null : () => Navigator.pop(dialogContext),
+              child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+              onPressed: isSaving
+                  ? null
+                  : () async {
+                final name = nameController.text.trim();
+                if (name.isEmpty) return;
+
+                final budgetText = budgetController.text.trim();
+                final budget = budgetText.isNotEmpty ? double.tryParse(budgetText) : null;
+
+                final updatedTrip = _currentTrip.copyWith(
+                  name: name,
+                  budget: budget,
+                  categories: selectedCats.toList(),
+                );
+
+                // Lock the dialog so the barrier/back-button/checkbox
+                // taps can't race with the pending save.
+                if (!dialogContext.mounted) return;
+                setState(() {
+                  isSaving = true;
+                });
+
+                await TripStorageService.addTrip(updatedTrip);
+
+                // Guard the DIALOG's context — it may already be gone
+                // if the user backed out or the page was popped while
+                // awaiting above.
+                if (!dialogContext.mounted) return;
+                if (mounted) {
+                  this.setState(() {
+                    _currentTrip = updatedTrip;
+                  });
+                }
+                Navigator.pop(dialogContext);
+              },
+              child: isSaving
+                  ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              )
+                  : const Text('Save', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showDeleteTripConfirmation() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
         title: const Text('Delete Trip', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: Text('Are you sure you want to delete "${widget.trip.name}"? This action cannot be undone.', style: const TextStyle(color: Colors.white70)),
+        content: Text('Are you sure you want to delete "${_currentTrip.name}"? This action cannot be undone.', style: const TextStyle(color: Colors.white70)),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel', style: TextStyle(color: Colors.white70))),
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancel', style: TextStyle(color: Colors.white70))),
           TextButton(
             onPressed: () async {
-              await TripStorageService.deleteTrip(widget.trip.tripId);
+              await TripStorageService.deleteTrip(_currentTrip.tripId);
+              if (!dialogContext.mounted) return;
+              Navigator.of(dialogContext).pop();
               if (!mounted) return;
-              Navigator.of(context).pop();
               Navigator.of(context).pop();
             },
             child: const Text('Delete', style: TextStyle(color: Colors.red)),

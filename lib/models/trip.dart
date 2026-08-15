@@ -50,4 +50,28 @@ class Trip {
           : null,
     );
   }
+
+  Trip copyWith({
+    String? tripId,
+    String? name,
+    List<String>? categories,
+    DateTime? createdAt,
+    DateTime? startDate,
+    DateTime? endDate,
+    String? description,
+    double? budget,
+    Map<String, double>? categoryBudgets,
+  }) {
+    return Trip(
+      tripId: tripId ?? this.tripId,
+      name: name ?? this.name,
+      categories: categories ?? this.categories,
+      createdAt: createdAt ?? this.createdAt,
+      startDate: startDate ?? this.startDate,
+      endDate: endDate ?? this.endDate,
+      description: description ?? this.description,
+      budget: budget ?? this.budget,
+      categoryBudgets: categoryBudgets ?? this.categoryBudgets,
+    );
+  }
 }

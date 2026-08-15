@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:pdf/pdf.dart';
+import 'package:printing/printing.dart';
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 import '../models/transaction_history_model.dart';
 import '../services/hybrid_storage_service.dart';
@@ -126,6 +129,10 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
               IconButton(
                 icon: const Icon(Icons.refresh, color: Colors.white),
                 onPressed: _loadTransactionHistory,
+              ),
+              IconButton(
+                icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
+                onPressed: _showPdfExportDialog,
               ),
             ],
           ),
@@ -947,6 +954,9 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     DateTime? endDate;
     bool includeCharts = true;
     bool includeSummary = true;
+    final fileNameController = TextEditingController(
+      text: _generateFileName(startDate, endDate),
+    );
 
     final result = await showDialog<String>(
       context: context,
@@ -954,20 +964,52 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
         builder: (ctx, setState) {
           return AlertDialog(
             backgroundColor: const Color(0xFF0E1F1F),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             title: Text(
               'Export PDF Report',
-              style: GoogleFonts.montserrat(color: Colors.white),
+              style: GoogleFonts.montserrat(color: Colors.white, fontWeight: FontWeight.bold),
             ),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text(
+                    'PDF File Name',
+                    style: GoogleFonts.openSans(
+                      color: Colors.white70,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: fileNameController,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: const Color(0xFF142626),
+                      suffixText: '.pdf',
+                      suffixStyle: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                      hintText: 'Enter report name',
+                      hintStyle: const TextStyle(color: Colors.white38),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.green.withValues(alpha: 0.3)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Colors.green),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   Text(
                     'Date Range',
                     style: GoogleFonts.openSans(
                       color: Colors.white70,
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -997,7 +1039,10 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                               },
                             );
                             if (date != null) {
-                              setState(() => startDate = date);
+                              setState(() {
+                                startDate = date;
+                                fileNameController.text = _generateFileName(startDate, endDate);
+                              });
                             }
                           },
                           child: Text(
@@ -1030,7 +1075,10 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                               },
                             );
                             if (date != null) {
-                              setState(() => endDate = date);
+                              setState(() {
+                                endDate = date;
+                                fileNameController.text = _generateFileName(startDate, endDate);
+                              });
                             }
                           },
                           child: Text(
@@ -1041,8 +1089,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
-
+                  const SizedBox(height: 12),
                   Wrap(
                     spacing: 8,
                     children: [
@@ -1050,52 +1097,56 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                         setState(() {
                           endDate = DateTime.now();
                           startDate = DateTime.now().subtract(const Duration(days: 7));
+                          fileNameController.text = _generateFileName(startDate, endDate);
                         });
                       }),
                       _buildQuickDateButton('Last 30 days', () {
                         setState(() {
                           endDate = DateTime.now();
                           startDate = DateTime.now().subtract(const Duration(days: 30));
+                          fileNameController.text = _generateFileName(startDate, endDate);
                         });
                       }),
                       _buildQuickDateButton('All time', () {
                         setState(() {
                           startDate = null;
                           endDate = null;
+                          fileNameController.text = _generateFileName(startDate, endDate);
                         });
                       }),
                     ],
                   ),
                   const SizedBox(height: 16),
-
                   Text(
                     'Export Options',
                     style: GoogleFonts.openSans(
                       color: Colors.white70,
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
                   CheckboxListTile(
                     title: Text(
                       'Include Summary',
-                      style: GoogleFonts.openSans(color: Colors.white70),
+                      style: GoogleFonts.openSans(color: Colors.white70, fontSize: 13),
                     ),
                     value: includeSummary,
                     onChanged: (value) => setState(() => includeSummary = value ?? true),
                     activeColor: Colors.green,
                     checkColor: Colors.white,
+                    contentPadding: EdgeInsets.zero,
                   ),
                   CheckboxListTile(
                     title: Text(
                       'Include Charts',
-                      style: GoogleFonts.openSans(color: Colors.white70),
+                      style: GoogleFonts.openSans(color: Colors.white70, fontSize: 13),
                     ),
                     value: includeCharts,
                     onChanged: (value) => setState(() => includeCharts = value ?? true),
                     activeColor: Colors.green,
                     checkColor: Colors.white,
+                    contentPadding: EdgeInsets.zero,
                   ),
                 ],
               ),
@@ -1105,9 +1156,14 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                 onPressed: () => Navigator.pop(ctx, 'cancel'),
                 child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
               ),
-              TextButton(
+              ElevatedButton(
                 onPressed: () => Navigator.pop(ctx, 'export'),
-                child: const Text('Export', style: TextStyle(color: Colors.green)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                child: const Text('Export'),
               ),
             ],
           );
@@ -1116,7 +1172,17 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     );
 
     if (result == 'export') {
-      await _exportPdf(startDate, endDate, includeCharts, includeSummary);
+      final customName = fileNameController.text;
+      fileNameController.dispose();
+      await _exportPdf(
+        startDate,
+        endDate,
+        includeCharts,
+        includeSummary,
+        customFileName: customName,
+      );
+    } else {
+      fileNameController.dispose();
     }
   }
 
@@ -1136,38 +1202,76 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     );
   }
 
-  Future<void> _exportPdf(DateTime? startDate, DateTime? endDate, bool includeCharts, bool includeSummary) async {
+  Future<void> _exportPdf(
+    DateTime? startDate,
+    DateTime? endDate,
+    bool includeCharts,
+    bool includeSummary, {
+    String? customFileName,
+  }) async {
     if (_isGeneratingPdf) return;
 
     setState(() {
       _isGeneratingPdf = true;
     });
 
-    try {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => Center(
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0E1F1F),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const CircularProgressIndicator(color: Colors.green),
-                const SizedBox(height: 16),
-                Text(
-                  'Generating PDF...',
-                  style: GoogleFonts.openSans(color: Colors.white),
+    // Sleek, compact, floating progress indicator dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0C1D1D),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF00C851).withValues(alpha: 0.3)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.5),
+                blurRadius: 16,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  color: Color(0xFF00C851),
+                  strokeWidth: 2.5,
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Generating PDF...',
+                style: GoogleFonts.openSans(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ),
         ),
-      );
+      ),
+    );
+
+    try {
+      String fileName;
+      if (customFileName != null && customFileName.trim().isNotEmpty) {
+        fileName = customFileName.trim()
+            .replaceAll(RegExp(r'[^\w\s\-\_]'), '_')
+            .replaceAll(RegExp(r'\.pdf$', caseSensitive: false), '');
+        if (fileName.isEmpty) {
+          fileName = _generateFileName(startDate, endDate);
+        }
+      } else {
+        fileName = _generateFileName(startDate, endDate);
+      }
 
       final pdfBytes = await PdfService.generateTransactionReport(
         startDate: startDate,
@@ -1176,14 +1280,76 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
         includeSummary: includeSummary,
       );
 
+      final filePath = await PdfService.savePdfToDevice(pdfBytes, fileName)
+          .timeout(const Duration(seconds: 15));
+
       if (mounted) {
-        Navigator.pop(context);
+        Navigator.pop(context); // Dismiss loading dialog
       }
 
-      await _showExportOptionsDialog(pdfBytes, startDate, endDate);
+      if (filePath != null && mounted) {
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF0E1F1F),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Color(0xFF00C851), size: 26),
+                const SizedBox(width: 10),
+                Text(
+                  'PDF Ready!',
+                  style: GoogleFonts.montserrat(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Your PDF has been generated & saved successfully.',
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                _buildFileDetails(fileName),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK', style: TextStyle(color: Colors.white70)),
+              ),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  Printing.layoutPdf(
+                    onLayout: (PdfPageFormat format) async => pdfBytes,
+                    name: '$fileName.pdf',
+                  );
+                },
+                icon: const Icon(Icons.picture_as_pdf_rounded, size: 18),
+                label: const Text('Open PDF'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00C851),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                ),
+              ),
+            ],
+          ),
+        );
+      } else {
+        throw Exception('Failed to save PDF');
+      }
     } catch (e) {
       if (mounted) {
-        Navigator.pop(context);
+        Navigator.pop(context); // Dismiss loading dialog if open
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error generating PDF: $e'),
@@ -1200,142 +1366,35 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     }
   }
 
-  Future<void> _showExportOptionsDialog(Uint8List pdfBytes, DateTime? startDate, DateTime? endDate) async {
-    final fileName = _generateFileName(startDate, endDate);
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => Center(
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: const Color(0xFF0E1F1F),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(color: Colors.green),
-              const SizedBox(height: 16),
-              Text(
-                'Saving PDF to device...',
-                style: GoogleFonts.openSans(color: Colors.white),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    try {
-      final filePath = await PdfService.savePdfToDevice(pdfBytes, fileName)
-          .timeout(const Duration(seconds: 15));
-
-      if (mounted) {
-        Navigator.pop(context);
-      }
-
-      if (filePath != null && mounted) {
-        await showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: const Color(0xFF0E1F1F),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            title: Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.green, size: 28),
-                const SizedBox(width: 12),
-                Text(
-                  'PDF Saved!',
-                  style: GoogleFonts.montserrat(color: Colors.white),
-                ),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Your PDF has been saved successfully to your device.',
-                  style: TextStyle(color: Colors.white70),
-                ),
-                const SizedBox(height: 12),
-                _buildFileDetails(fileName),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('OK', style: TextStyle(color: Colors.green)),
-              ),
-            ],
-          ),
-        );
-      } else {
-        throw Exception('Failed to save PDF');
-      }
-    } catch (e) {
-      if (mounted) {
-        Navigator.pop(context);
-        await showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: const Color(0xFF0E1F1F),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            title: Row(
-              children: [
-                const Icon(Icons.error, color: Colors.red, size: 28),
-                const SizedBox(width: 12),
-                Text(
-                  'Save Failed',
-                  style: GoogleFonts.montserrat(color: Colors.white),
-                ),
-              ],
-            ),
-            content: Text(
-              'Failed to save PDF: $e',
-              style: const TextStyle(color: Colors.white70),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('OK', style: TextStyle(color: Colors.red)),
-              ),
-            ],
-          ),
-        );
-      }
-    }
-  }
-
   Widget _buildFileDetails(String fileName) {
+    String locationText;
+    if (Platform.isIOS) {
+      locationText = 'Files App > On My iPhone > Vaultic';
+    } else if (Platform.isAndroid) {
+      locationText = 'Downloads folder';
+    } else {
+      locationText = 'Documents folder';
+    }
+
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A2A2A),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+        color: const Color(0xFF142626),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF00C851).withValues(alpha: 0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'File Details:',
-            style: TextStyle(
-              color: Colors.green,
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-            ),
+          Text(
+            'Name: $fileName.pdf',
+            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 4),
           Text(
-            'Name: $fileName.pdf',
+            'Location: $locationText',
             style: const TextStyle(color: Colors.white70, fontSize: 12),
-          ),
-          const Text(
-            'Location: Documents folder',
-            style: TextStyle(color: Colors.white70, fontSize: 12),
           ),
         ],
       ),

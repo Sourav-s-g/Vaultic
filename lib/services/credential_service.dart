@@ -34,7 +34,7 @@ class CredentialService {
       // Priority 2: Environment variables from .env file
       if (_supabaseUrl == null || _supabaseAnonKey == null) {
         try {
-          await dotenv.load(fileName: ".env");
+          await dotenv.load(fileName: ".env", isOptional: true);
           _supabaseUrl ??= dotenv.env['SUPABASE_URL'];
           _supabaseAnonKey ??= dotenv.env['SUPABASE_ANON_KEY'];
           _pdfshiftApiKey ??= dotenv.env['PDFSHIFT_API_KEY'];

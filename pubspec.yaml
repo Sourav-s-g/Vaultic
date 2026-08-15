@@ -43,12 +43,13 @@ flutter:
     - assets/OTP_verification_image.jpeg
     - assets/Vautlic_appicon.jpeg
     - assets/vaultic_splash_fullscreen.png
+    - assets/Vaultic_new.png
     - .env
 
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: assets/Vautlic_appicon.jpeg
+  image_path: assets/Vaultic_new.png
   adaptive_icon_background: "#032221"
   adaptive_icon_foreground: assets/Vautlic_appicon.jpeg
 
