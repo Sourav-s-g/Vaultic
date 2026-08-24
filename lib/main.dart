@@ -238,9 +238,9 @@ class _VaulticState extends State<Vaultic> {
         _loadingMessage = 'Almost ready...';
       });
 
-      // Calculate minimum time (3 seconds)
+      // Calculate minimum time (2 seconds)
       final elapsed = DateTime.now().difference(startTime);
-      final remainingTime = const Duration(seconds: 3) - elapsed;
+      final remainingTime = const Duration(seconds: 2) - elapsed;
 
       if (remainingTime.inMilliseconds > 0) {
         // Animate progress bar to completion during remaining time
@@ -272,7 +272,7 @@ class _VaulticState extends State<Vaultic> {
       print('Error during app initialization: $e');
       // Even if there's an error, ensure minimum time and proceed
       final elapsed = DateTime.now().difference(startTime);
-      final remainingTime = const Duration(seconds: 3) - elapsed;
+      final remainingTime = const Duration(seconds: 2) - elapsed;
 
       if (remainingTime.inMilliseconds > 0) {
         setState(() {

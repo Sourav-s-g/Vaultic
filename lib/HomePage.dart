@@ -40,7 +40,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
   List<Map<String, dynamic>> _recentTransactionsRaw = []; // Store raw maps for sync status
   List<String> _categories = [];
   bool _isLoadingTransactions = false;
-  
+
 
   @override
   void initState() {
@@ -53,17 +53,35 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
     });
   }
 
+  /// Pulled down by the user via RefreshIndicator. Pushes any locally
+  /// queued (offline) changes first, then re-fetches categories and
+  /// transactions — HybridStorageService already fetches straight from
+  /// Supabase when authenticated, so this is enough to pull in changes
+  /// made from another device.
+  Future<void> _refreshData() async {
+    try {
+      await HybridStorageService.processSyncQueue();
+    } catch (_) {}
+    await Future.wait([
+      _loadCategories(),
+      _loadAllTransactions(),
+    ]);
+    // Trips tab uses a FutureBuilder that re-runs on rebuild, so this
+    // setState is enough to refresh it too.
+    if (mounted) setState(() {});
+  }
+
   void _checkOfflineMode() async {
     // Wait a bit for data to load
     await Future.delayed(const Duration(milliseconds: 500));
-    
+
     if (!mounted) return;
-    
+
     // Check if user is not authenticated (offline mode)
     try {
       final session = Supabase.instance.client.auth.currentSession;
       final user = session?.user;
-      
+
       if (user == null) {
         // User is in offline mode - show snackbar
         ScaffoldMessenger.of(context).showSnackBar(
@@ -141,7 +159,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const Vaulticlogin()),
-        (Route<dynamic> route) => false,
+            (Route<dynamic> route) => false,
       );
     } catch (e) {
       if (!mounted) return;
@@ -176,29 +194,29 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
       context: context,
       builder:
           (ctx) => AlertDialog(
-            backgroundColor: const Color(0xFF0E1F1F),
-            title: const Text('Add Category', style: TextStyle(color: Colors.white)),
-            content: TextField(
-              controller: controller,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                hintText: 'Category name',
-                hintStyle: TextStyle(color: Colors.white38),
-                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.green)),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-                child: const Text('Add', style: TextStyle(color: Colors.green)),
-              ),
-            ],
+        backgroundColor: const Color(0xFF0E1F1F),
+        title: const Text('Add Category', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'Category name',
+            hintStyle: TextStyle(color: Colors.white38),
+            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.green)),
           ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Add', style: TextStyle(color: Colors.green)),
+          ),
+        ],
+      ),
     );
     if (name != null && name.isNotEmpty) {
       await HybridStorageService.addCategory({'name': name});
@@ -215,121 +233,289 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
       text: parsedTransaction?.description ?? '',
     );
     String type = parsedTransaction?.type ?? 'Debit';
-    String? category = parsedTransaction?.category ?? 
+    String? category = parsedTransaction?.category ??
         (_categories.isNotEmpty ? _categories.first : null);
     DateTime selectedDate = parsedTransaction?.date ?? DateTime.now();
     ParsedTransaction? currentParsed;
-    
+
     final result = await showDialog<bool>(
       context: context,
       builder:
           (ctx) => StatefulBuilder(
-            builder:
-                (ctx, setStateSb) {
-                  // Parse NLP input when text changes
-                  void parseNlpInput(String text) {
-                    if (text.trim().isEmpty) {
-                      setStateSb(() {
-                        currentParsed = null;
-                      });
-                      return;
-                    }
-                    final parsed = SmartInputParser.parseInput(text, _categories);
-                    setStateSb(() {
-                      currentParsed = parsed;
-                      // Update amount if parsed
-                      if (parsed.amount != null) {
-                        amountController.text = parsed.amount.toString();
-                      }
-                      // Update description if parsed
-                      if (parsed.description.isNotEmpty && parsed.description != 'Transaction') {
-                        descriptionController.text = parsed.description;
-                      }
-                      // Update type if parsed
-                      if (parsed.type != null) {
-                        type = parsed.type!;
-                        // If type changes to Credit, clear category
-                        if (type == 'Credit') {
-                          category = null;
-                        }
-                      }
-                      // Update category if parsed and type is Debit
-                      if (parsed.category != null && parsed.type != 'Credit') {
-                        // Only set category if it exists in available categories
-                        if (_categories.contains(parsed.category)) {
-                          category = parsed.category;
-                        } else if (_categories.isNotEmpty) {
-                          // Fallback to first category if parsed category not found
-                          category = _categories.first;
-                        }
-                      }
-                      // Update date if parsed
-                      if (parsed.date != null) {
-                        selectedDate = parsed.date!;
-                      }
-                    });
-                  }
-                  
-                  return AlertDialog(
-                    backgroundColor: const Color(0xFF0E1F1F),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+        builder:
+            (ctx, setStateSb) {
+          // Parse NLP input when text changes
+          void parseNlpInput(String text) {
+            if (text.trim().isEmpty) {
+              setStateSb(() {
+                currentParsed = null;
+              });
+              return;
+            }
+            final parsed = SmartInputParser.parseInput(text, _categories);
+            setStateSb(() {
+              currentParsed = parsed;
+              // Update amount if parsed
+              if (parsed.amount != null) {
+                amountController.text = parsed.amount.toString();
+              }
+              // Update description if parsed
+              if (parsed.description.isNotEmpty && parsed.description != 'Transaction') {
+                descriptionController.text = parsed.description;
+              }
+              // Update type if parsed
+              if (parsed.type != null) {
+                type = parsed.type!;
+                // If type changes to Credit, clear category
+                if (type == 'Credit') {
+                  category = null;
+                }
+              }
+              // Update category if parsed and type is Debit
+              if (parsed.category != null && parsed.type != 'Credit') {
+                // Only set category if it exists in available categories
+                if (_categories.contains(parsed.category)) {
+                  category = parsed.category;
+                } else if (_categories.isNotEmpty) {
+                  // Fallback to first category if parsed category not found
+                  category = _categories.first;
+                }
+              }
+              // Update date if parsed
+              if (parsed.date != null) {
+                selectedDate = parsed.date!;
+              }
+            });
+          }
+
+          return AlertDialog(
+            backgroundColor: const Color(0xFF0E1F1F),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Text('New Transaction', style: GoogleFonts.nunito(color: Colors.white)),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // NLP Input Field
+                  TextField(
+                    controller: nlpController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Quick Add (e.g., "Lunch 250 Food")',
+                      labelStyle: const TextStyle(color: Colors.white70),
+                      hintText: 'Type: "Lunch 250" or "Got ₹500 salary"',
+                      hintStyle: const TextStyle(color: Colors.white38),
+                      prefixIcon: const Icon(Icons.edit_note, color: Colors.white70),
+                      suffixIcon: currentParsed != null && currentParsed!.hasAmount
+                          ? Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              currentParsed!.type == 'Credit' ? Icons.arrow_downward : Icons.arrow_upward,
+                              size: 14,
+                              color: Colors.green,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '₹${currentParsed!.amount!.toStringAsFixed(0)}',
+                              style: GoogleFonts.nunito(
+                                color: Colors.green,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            if (currentParsed!.hasCategory) ...[
+                              const SizedBox(width: 4),
+                              Text(
+                                '• ${currentParsed!.category}',
+                                style: GoogleFonts.nunito(
+                                  color: Colors.green.withOpacity(0.8),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      )
+                          : null,
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: const BorderSide(color: Colors.white24),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: const BorderSide(color: Colors.green),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
-                    title: Text('New Transaction', style: GoogleFonts.nunito(color: Colors.white)),
-                    content: SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                    onChanged: (text) => parseNlpInput(text),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: amountController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            labelText: 'Amount',
+                            labelStyle: const TextStyle(color: Colors.white70),
+                            prefixIcon: const Icon(Icons.currency_rupee, color: Colors.white70),
+                            enabledBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(color: Colors.white24),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(color: Colors.green),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: descriptionController,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            labelText: 'Description',
+                            labelStyle: const TextStyle(color: Colors.white70),
+                            prefixIcon: const Icon(Icons.edit_note, color: Colors.white70),
+                            enabledBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(color: Colors.white24),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(color: Colors.green),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  InkWell(
+                    onTap: () async {
+                      final date = await showDatePicker(
+                        context: ctx,
+                        initialDate: selectedDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                        builder: (context, child) {
+                          return Theme(
+                            data: Theme.of(context).copyWith(
+                              colorScheme: const ColorScheme.dark(
+                                primary: Colors.green,
+                                onPrimary: Colors.white,
+                                surface: Color(0xFF0E1F1F),
+                                onSurface: Colors.white,
+                              ),
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
+                      if (date != null) {
+                        setStateSb(() => selectedDate = date);
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.white24),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
                         children: [
-                          // NLP Input Field
-                          TextField(
-                            controller: nlpController,
+                          const Icon(Icons.calendar_today, color: Colors.white70),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Date: ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
                             style: const TextStyle(color: Colors.white),
+                          ),
+                          const Spacer(),
+                          const Icon(Icons.arrow_drop_down, color: Colors.white70),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          value: type,
+                          items: ['Credit', 'Debit']
+                              .map(
+                                (e) => DropdownMenuItem(
+                              value: e,
+                              child: Text(e, style: const TextStyle(color: Colors.white)),
+                            ),
+                          )
+                              .toList(),
+                          onChanged: (v) {
+                            setStateSb(() {
+                              type = v ?? 'Debit';
+                              if (type == 'Credit') {
+                                category = null;
+                              } else if (type == 'Debit' && category == null && _categories.isNotEmpty) {
+                                category = _categories.first;
+                              }
+                            });
+                          },
+                          decoration: InputDecoration(
+                            labelText: 'Type',
+                            labelStyle: const TextStyle(color: Colors.white70),
+                            prefixIcon: const Icon(Icons.swap_vert, color: Colors.white70),
+                            isDense: true,
+                            enabledBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(color: Colors.white24),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(color: Colors.green),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          dropdownColor: const Color(0xFF0E1F1F),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      if (type == 'Debit')
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            value: category ?? (_categories.isNotEmpty ? _categories.first : null),
+                            items: _categories
+                                .map(
+                                  (e) => DropdownMenuItem(
+                                value: e,
+                                child: Text(e, style: const TextStyle(color: Colors.white)),
+                              ),
+                            )
+                                .toList(),
+                            onChanged: (v) {
+                              setStateSb(() => category = v);
+                            },
                             decoration: InputDecoration(
-                              labelText: 'Quick Add (e.g., "Lunch 250 Food")',
+                              labelText: 'Category',
                               labelStyle: const TextStyle(color: Colors.white70),
-                              hintText: 'Type: "Lunch 250" or "Got ₹500 salary"',
-                              hintStyle: const TextStyle(color: Colors.white38),
-                              prefixIcon: const Icon(Icons.edit_note, color: Colors.white70),
-                              suffixIcon: currentParsed != null && currentParsed!.hasAmount
-                                  ? Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      margin: const EdgeInsets.only(right: 8),
-                                      decoration: BoxDecoration(
-                                        color: Colors.green.withOpacity(0.2),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            currentParsed!.type == 'Credit' ? Icons.arrow_downward : Icons.arrow_upward,
-                                            size: 14,
-                                            color: Colors.green,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            '₹${currentParsed!.amount!.toStringAsFixed(0)}',
-                                            style: GoogleFonts.nunito(
-                                              color: Colors.green,
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          if (currentParsed!.hasCategory) ...[
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              '• ${currentParsed!.category}',
-                                              style: GoogleFonts.nunito(
-                                                color: Colors.green.withOpacity(0.8),
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    )
-                                  : null,
+                              prefixIcon: const Icon(Icons.category, color: Colors.white70),
+                              isDense: true,
                               enabledBorder: OutlineInputBorder(
                                 borderSide: const BorderSide(color: Colors.white24),
                                 borderRadius: BorderRadius.circular(12),
@@ -339,204 +525,36 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
-                            onChanged: (text) => parseNlpInput(text),
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: amountController,
-                                  keyboardType: const TextInputType.numberWithOptions(
-                                    decimal: true,
-                                  ),
-                                  style: const TextStyle(color: Colors.white),
-                                  decoration: InputDecoration(
-                                    labelText: 'Amount',
-                                    labelStyle: const TextStyle(color: Colors.white70),
-                                    prefixIcon: const Icon(Icons.currency_rupee, color: Colors.white70),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderSide: const BorderSide(color: Colors.white24),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderSide: const BorderSide(color: Colors.green),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: TextField(
-                                  controller: descriptionController,
-                                  style: const TextStyle(color: Colors.white),
-                                  decoration: InputDecoration(
-                                    labelText: 'Description',
-                                    labelStyle: const TextStyle(color: Colors.white70),
-                                    prefixIcon: const Icon(Icons.edit_note, color: Colors.white70),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderSide: const BorderSide(color: Colors.white24),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderSide: const BorderSide(color: Colors.green),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        const SizedBox(height: 12),
-                        InkWell(
-                          onTap: () async {
-                            final date = await showDatePicker(
-                              context: ctx,
-                              initialDate: selectedDate,
-                              firstDate: DateTime(2020),
-                              lastDate: DateTime.now().add(const Duration(days: 365)),
-                              builder: (context, child) {
-                                return Theme(
-                                  data: Theme.of(context).copyWith(
-                                    colorScheme: const ColorScheme.dark(
-                                      primary: Colors.green,
-                                      onPrimary: Colors.white,
-                                      surface: Color(0xFF0E1F1F),
-                                      onSurface: Colors.white,
-                                    ),
-                                  ),
-                                  child: child!,
-                                );
-                              },
-                            );
-                            if (date != null) {
-                              setStateSb(() => selectedDate = date);
-                            }
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.white24),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.calendar_today, color: Colors.white70),
-                                const SizedBox(width: 12),
-                                Text(
-                                  'Date: ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                                const Spacer(),
-                                const Icon(Icons.arrow_drop_down, color: Colors.white70),
-                              ],
-                            ),
+                            dropdownColor: const Color(0xFF0E1F1F),
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                isExpanded: true,
-                                value: type,
-                                items: ['Credit', 'Debit']
-                                    .map(
-                                      (e) => DropdownMenuItem(
-                                        value: e,
-                                        child: Text(e, style: const TextStyle(color: Colors.white)),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: (v) {
-                                  setStateSb(() {
-                                    type = v ?? 'Debit';
-                                    if (type == 'Credit') {
-                                      category = null;
-                                    } else if (type == 'Debit' && category == null && _categories.isNotEmpty) {
-                                      category = _categories.first;
-                                    }
-                                  });
-                                },
-                                decoration: InputDecoration(
-                                  labelText: 'Type',
-                                  labelStyle: const TextStyle(color: Colors.white70),
-                                  prefixIcon: const Icon(Icons.swap_vert, color: Colors.white70),
-                                  isDense: true,
-                                  enabledBorder: OutlineInputBorder(
-                                    borderSide: const BorderSide(color: Colors.white24),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderSide: const BorderSide(color: Colors.green),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                dropdownColor: const Color(0xFF0E1F1F),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            if (type == 'Debit')
-                              Expanded(
-                                child: DropdownButtonFormField<String>(
-                                  isExpanded: true,
-                                  value: category ?? (_categories.isNotEmpty ? _categories.first : null),
-                                  items: _categories
-                                      .map(
-                                        (e) => DropdownMenuItem(
-                                          value: e,
-                                          child: Text(e, style: const TextStyle(color: Colors.white)),
-                                        ),
-                                      )
-                                      .toList(),
-                                  onChanged: (v) {
-                                    setStateSb(() => category = v);
-                                  },
-                                  decoration: InputDecoration(
-                                    labelText: 'Category',
-                                    labelStyle: const TextStyle(color: Colors.white70),
-                                    prefixIcon: const Icon(Icons.category, color: Colors.white70),
-                                    isDense: true,
-                                    enabledBorder: OutlineInputBorder(
-                                      borderSide: const BorderSide(color: Colors.white24),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderSide: const BorderSide(color: Colors.green),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                  dropdownColor: const Color(0xFF0E1F1F),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
+                    ],
                   ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, false),
-                      child: const Text('Cancel'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, true),
-                      child: const Text('Save', style: TextStyle(color: Colors.green)),
-                    ),
-                  ],
-                );
-                },
-          ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Save', style: TextStyle(color: Colors.green)),
+              ),
+            ],
+          );
+        },
+      ),
     );
     if (result == true) {
       final amount = double.tryParse(amountController.text.trim()) ?? 0.0;
       final txnMap = {
         'transactionId': const Uuid().v4(),
         'description':
-            descriptionController.text.trim().isEmpty
-                ? 'Manual Entry'
-                : descriptionController.text.trim(),
+        descriptionController.text.trim().isEmpty
+            ? 'Manual Entry'
+            : descriptionController.text.trim(),
         'amount': amount,
         'type': type,
         'date': selectedDate.toIso8601String(),
@@ -591,15 +609,21 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
           ),
         ),
         child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.only(bottom: 80),
-            child: Column(
-              children: [
-                _buildHeader(),
-                _buildSummarySection(),
-                _buildTransactionsSection(),
-                _buildFooter(),
-              ],
+          child: RefreshIndicator(
+            onRefresh: _refreshData,
+            color: Colors.green,
+            backgroundColor: const Color(0xFF0E1F1F),
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.only(bottom: 80),
+              child: Column(
+                children: [
+                  _buildHeader(),
+                  _buildSummarySection(),
+                  _buildTransactionsSection(),
+                  _buildFooter(),
+                ],
+              ),
             ),
           ),
         ),
@@ -689,7 +713,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
             onTap: _navigateToTransactionHistory,
           ),
           ...categoryCards.map(
-            (entry) => _buildFeatureCard(
+                (entry) => _buildFeatureCard(
               title: entry.key,
               amount: '₹${entry.value.toStringAsFixed(0)}',
               icon: Icons.category,
@@ -718,9 +742,9 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
       MaterialPageRoute(
         builder:
             (_) => CategoryTransactionsScreen(
-              category: allDebit ? 'This Month Spent' : category,
-              allDebit: allDebit,
-            ),
+          category: allDebit ? 'This Month Spent' : category,
+          allDebit: allDebit,
+        ),
       ),
     );
   }
@@ -907,45 +931,45 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
           );
         }
         final entries =
-            byMonth.entries.toList()..sort((a, b) => b.key.compareTo(a.key));
+        byMonth.entries.toList()..sort((a, b) => b.key.compareTo(a.key));
         return ListView(
           children:
-              entries.map((e) {
-                final isPositive = e.value >= 0;
-                return GestureDetector(
-                  onTap: () => _showMonthDetailsDialog(e.key, txns),
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withOpacity(0.1)),
+          entries.map((e) {
+            final isPositive = e.value >= 0;
+            return GestureDetector(
+              onTap: () => _showMonthDetailsDialog(e.key, txns),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white.withOpacity(0.1)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      _formatMonthLabel(e.key),
+                      style: GoogleFonts.nunito(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          _formatMonthLabel(e.key),
-                          style: GoogleFonts.nunito(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        Text(
-                          '${isPositive ? "+" : "-"}₹${e.value.abs().toStringAsFixed(0)}',
-                          style: GoogleFonts.nunito(
-                            color: isPositive ? Colors.greenAccent : Colors.redAccent,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
+                    Text(
+                      '${isPositive ? "+" : "-"}₹${e.value.abs().toStringAsFixed(0)}',
+                      style: GoogleFonts.nunito(
+                        color: isPositive ? Colors.greenAccent : Colors.redAccent,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                );
-              }).toList(),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
         );
       },
     );
@@ -994,9 +1018,9 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
           height: 48,
           decoration: BoxDecoration(
             color:
-                isCredit
-                    ? Colors.green.withOpacity(0.2)
-                    : Colors.red.withOpacity(0.2),
+            isCredit
+                ? Colors.green.withOpacity(0.2)
+                : Colors.red.withOpacity(0.2),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
@@ -1024,21 +1048,21 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
             Builder(
               builder: (context) {
                 final txnRaw = _recentTransactionsRaw.firstWhere(
-                  (t) => (t['transactionId'] ?? '').toString() == transaction.transactionId,
+                      (t) => (t['transactionId'] ?? '').toString() == transaction.transactionId,
                   orElse: () => <String, dynamic>{},
                 );
-                final isPending = txnRaw.isNotEmpty && 
+                final isPending = txnRaw.isNotEmpty &&
                     (txnRaw['_syncStatus'] ?? 'synced').toString() == 'pending';
-                
+
                 return isPending
                     ? Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: Icon(
-                          Icons.cloud_off,
-                          size: 16,
-                          color: Colors.orange.withOpacity(0.7),
-                        ),
-                      )
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Icon(
+                    Icons.cloud_off,
+                    size: 16,
+                    color: Colors.orange.withOpacity(0.7),
+                  ),
+                )
                     : const SizedBox.shrink();
               },
             ),
@@ -1079,9 +1103,9 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
       transactionId: (m['transactionId'] ?? m['transaction_id'] ?? '').toString(),
       description: (m['description'] ?? '').toString(),
       amount:
-          (m['amount'] is num)
-              ? (m['amount'] as num).toDouble()
-              : double.tryParse((m['amount'] ?? '0').toString()) ?? 0.0,
+      (m['amount'] is num)
+          ? (m['amount'] as num).toDouble()
+          : double.tryParse((m['amount'] ?? '0').toString()) ?? 0.0,
       type: (m['type'] ?? '').toString(),
       date: DateTime.tryParse((m['date'] ?? '').toString()) ?? DateTime.now(),
       category: (m['category'] ?? '').toString(),
@@ -1094,10 +1118,10 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
     return _recentAndAllTransactions()
         .where(
           (t) =>
-              t.type == 'Debit' &&
-              t.date.year == now.year &&
-              t.date.month == now.month,
-        )
+      t.type == 'Debit' &&
+          t.date.year == now.year &&
+          t.date.month == now.month,
+    )
         .fold(0.0, (sum, t) => sum + t.amount);
   }
 
@@ -1106,10 +1130,10 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
     return _recentAndAllTransactions()
         .where(
           (t) =>
-              t.category == category &&
-              t.date.year == now.year &&
-              t.date.month == now.month,
-        )
+      t.category == category &&
+          t.date.year == now.year &&
+          t.date.month == now.month,
+    )
         .fold(0.0, (sum, t) => sum + (t.type == 'Debit' ? t.amount : 0.0));
   }
 
@@ -1282,7 +1306,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                     ),
                   );
                 }
-                
+
                 final trips = snapshot.data!;
                 if (trips.isEmpty) {
                   return Center(
@@ -1314,7 +1338,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                     ),
                   );
                 }
-                
+
                 return ListView.builder(
                   itemCount: trips.length,
                   itemBuilder: (context, index) {
@@ -1335,20 +1359,20 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
     final parts = monthKey.split('-');
     final year = int.parse(parts[0]);
     final month = int.parse(parts[1]);
-    
+
     // Filter transactions for this month
     final monthTransactions = allTransactions.where((t) {
       return t.date.year == year && t.date.month == month;
     }).toList();
-    
+
     // Calculate total income and expense
     final totalIncome = monthTransactions.where((t) => t.type == 'Credit').fold(0.0, (sum, t) => sum + t.amount);
     final totalExpense = monthTransactions.where((t) => t.type == 'Debit').fold(0.0, (sum, t) => sum + t.amount);
     final netSavings = totalIncome - totalExpense;
-    
+
     // Group by category and calculate daily averages
     final categoryData = <String, Map<String, dynamic>>{};
-    
+
     for (final t in monthTransactions) {
       if (t.type != 'Debit') continue;
       if (!categoryData.containsKey(t.category)) {
@@ -1360,7 +1384,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
       categoryData[t.category]!['total'] += t.amount;
       categoryData[t.category]!['days'].add(t.date.day);
     }
-    
+
     // Calculate average per day for each category
     final categoryExpenses = <String, Map<String, double>>{};
     for (final entry in categoryData.entries) {
@@ -1368,14 +1392,14 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
       final total = entry.value['total'] as double;
       final daysUsed = (entry.value['days'] as Set<int>).length;
       final avgPerDay = daysUsed > 0 ? total / daysUsed : 0.0;
-      
+
       categoryExpenses[category] = {
         'total': total,
         'avgPerDay': avgPerDay,
         'daysUsed': daysUsed.toDouble(),
       };
     }
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1434,7 +1458,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                
+
                 // Net Savings
                 Container(
                   width: double.infinity,
@@ -1452,7 +1476,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                
+
                 if (categoryExpenses.isNotEmpty) ...[
                   Text(
                     'Expense Breakdown',
@@ -1463,7 +1487,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  
+
                   // Category List
                   ...categoryExpenses.entries.map((entry) {
                     final categoryData = entry.value;
@@ -1471,7 +1495,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                     final avgPerDay = categoryData['avgPerDay']!;
                     final daysUsed = categoryData['daysUsed']!.toInt();
                     final percentage = totalExpense > 0 ? (total / totalExpense * 100) : 0;
-                    
+
                     return Container(
                       margin: const EdgeInsets.only(bottom: 8),
                       padding: const EdgeInsets.all(12),
@@ -1573,7 +1597,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
     String? category = _categories.isNotEmpty ? _categories.first : null;
     // Pre-fill with middle of the selected month
     DateTime selectedDate = DateTime(year, month, 15);
-    
+
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -1681,10 +1705,10 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                   items: ['Credit', 'Debit']
                       .map(
                         (e) => DropdownMenuItem(
-                          value: e,
-                          child: Text(e, style: const TextStyle(color: Colors.white)),
-                        ),
-                      )
+                      value: e,
+                      child: Text(e, style: const TextStyle(color: Colors.white)),
+                    ),
+                  )
                       .toList(),
                   onChanged: (v) {
                     setStateSb(() => type = v ?? 'Debit');
@@ -1711,10 +1735,10 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                     items: _categories
                         .map(
                           (e) => DropdownMenuItem(
-                            value: e,
-                            child: Text(e, style: const TextStyle(color: Colors.white)),
-                          ),
-                        )
+                        value: e,
+                        child: Text(e, style: const TextStyle(color: Colors.white)),
+                      ),
+                    )
                         .toList(),
                     onChanged: (v) {
                       setStateSb(() => category = v);
@@ -1751,15 +1775,15 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
         ),
       ),
     );
-    
+
     if (result == true) {
       final amount = double.tryParse(amountController.text.trim()) ?? 0.0;
       final txnMap = {
         'transactionId': const Uuid().v4(),
         'description':
-            descriptionController.text.trim().isEmpty
-                ? 'Manual Entry'
-                : descriptionController.text.trim(),
+        descriptionController.text.trim().isEmpty
+            ? 'Manual Entry'
+            : descriptionController.text.trim(),
         'amount': amount,
         'type': type,
         'date': selectedDate.toIso8601String(),
@@ -1827,7 +1851,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Category Selection
                 Text(
                   'Select Categories',
@@ -1838,7 +1862,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                
+
                 // Category Checkboxes
                 SizedBox(
                   height: 200,
@@ -1847,7 +1871,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                     itemBuilder: (context, index) {
                       final category = _categories[index];
                       final isSelected = selectedCategories.contains(category);
-                      
+
                       return CheckboxListTile(
                         title: Text(
                           category,
@@ -1894,16 +1918,16 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                   );
                   return;
                 }
-                
+
                 if (selectedCategories.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Please select at least one category')),
                   );
                   return;
                 }
-                
+
                 Navigator.of(context).pop();
-                
+
                 // Show budget setup dialog
                 _showBudgetSetupDialog(tripNameController.text.trim(), selectedCategories.toList());
               },
@@ -1924,7 +1948,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
   void _showBudgetSetupDialog(String tripName, List<String> categories) {
     final budgetController = TextEditingController();
     final categoryBudgetControllers = <String, TextEditingController>{};
-    
+
     // Initialize controllers for each category
     for (final category in categories) {
       categoryBudgetControllers[category] = TextEditingController();
@@ -1957,7 +1981,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Total Budget
                 Text(
                   'Total Budget (Optional)',
@@ -1992,7 +2016,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Category Budgets
                 Text(
                   'Category Budgets (Optional)',
@@ -2003,7 +2027,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                
+
                 SizedBox(
                   height: 200,
                   child: ListView.builder(
@@ -2011,7 +2035,7 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                     itemBuilder: (context, index) {
                       final category = categories[index];
                       final controller = categoryBudgetControllers[category]!;
-                      
+
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         child: TextField(
@@ -2053,11 +2077,11 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                   categories: categories,
                   createdAt: DateTime.now(),
                 );
-                
+
                 await TripStorageService.addTrip(trip);
                 if (!mounted) return;
                 Navigator.of(context).pop();
-                
+
                 // Navigate to trip page
                 Navigator.push(
                   context,
@@ -2079,11 +2103,11 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                 // Parse budgets
                 double? totalBudget;
                 Map<String, double>? categoryBudgets;
-                
+
                 if (budgetController.text.trim().isNotEmpty) {
                   totalBudget = double.tryParse(budgetController.text.trim());
                 }
-                
+
                 final categoryBudgetMap = <String, double>{};
                 for (final entry in categoryBudgetControllers.entries) {
                   if (entry.value.text.trim().isNotEmpty) {
@@ -2093,11 +2117,11 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                     }
                   }
                 }
-                
+
                 if (categoryBudgetMap.isNotEmpty) {
                   categoryBudgets = categoryBudgetMap;
                 }
-                
+
                 // Create trip with budget
                 final trip = Trip(
                   tripId: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -2107,11 +2131,11 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
                   budget: totalBudget,
                   categoryBudgets: categoryBudgets,
                 );
-                
+
                 await TripStorageService.addTrip(trip);
                 if (!mounted) return;
                 Navigator.of(context).pop();
-                
+
                 // Navigate to trip page
                 Navigator.push(
                   context,
