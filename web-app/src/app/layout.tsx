@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import "./globals.css";
 import { AppProviders } from "@/components/app-providers";
 import { WorkspaceShell } from "@/components/workspace-shell";
@@ -8,7 +9,7 @@ export const metadata: Metadata = {
   description: "A clear, private workspace for personal finance.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
