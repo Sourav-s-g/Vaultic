@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utils/category_name.dart';
 
 class SupabaseService {
   static final SupabaseClient _client = Supabase.instance.client;
@@ -30,11 +31,21 @@ class SupabaseService {
   static Future<void> deleteCategory(String name) async {
     if (!_isSessionValid() || userId == null) return;
     try {
+      final categories = await getCategories();
+      final normalizedName = normalizeCategoryName(name);
+      final matchingCategory = categories.where(
+        (category) =>
+            normalizeCategoryName((category['name'] ?? '').toString()) ==
+            normalizedName,
+      );
+      final storedName = matchingCategory.isEmpty
+          ? name
+          : (matchingCategory.first['name'] ?? name).toString();
       await _client
           .from('categories')
           .delete()
           .eq('user_id', userId!)
-          .eq('name', name);
+          .eq('name', storedName);
     } catch (e) {
       print('Error deleting category: $e');
       rethrow;
@@ -71,7 +82,7 @@ class SupabaseService {
       List<Map<String, dynamic>> categories,
       ) async {
     if (!_isSessionValid() || userId == null) return;
-    for (final category in categories) {
+    for (final category in deduplicateCategories(categories)) {
       await addCategory(category);
     }
   }
@@ -80,16 +91,14 @@ class SupabaseService {
     if (!_isSessionValid() || userId == null) return;
 
     try {
-      final categoryName = category['name'] ?? '';
-      if (categoryName.isNotEmpty) {
-        final existing = await _client
-            .from('categories')
-            .select('id')
-            .eq('user_id', userId!)
-            .eq('name', categoryName)
-            .maybeSingle();
-
-        if (existing != null) return;
+      final categoryName = (category['name'] ?? '').toString();
+      if (categoryName.trim().isEmpty) return;
+      final existing = await getCategories();
+      if (categoryNameExists(
+        existing.map((item) => (item['name'] ?? '').toString()),
+        categoryName,
+      )) {
+        return;
       }
 
       await _client.from('categories').insert({
@@ -98,6 +107,10 @@ class SupabaseService {
         'color': category['color'] ?? '#FF6B6B',
         'icon': category['icon'] ?? 'category',
       });
+    } on PostgrestException catch (e) {
+      if (e.code == '23505') return;
+      print('Error adding category: $e');
+      rethrow;
     } catch (e) {
       print('Error adding category: $e');
       rethrow;

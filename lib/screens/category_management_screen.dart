@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../HomePage.dart';
 import '../services/hybrid_storage_service.dart';
+import '../utils/category_name.dart';
 
 class CategoryManagementScreen extends StatefulWidget {
   const CategoryManagementScreen({super.key});
@@ -65,19 +66,28 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
 
   void _addCustomCategory() {
     final text = _categoryController.text.trim();
-    if (text.isNotEmpty) {
-      final newCategory = SpendingCategory(
-        name: text,
-        icon: Icons.category,
-        color: Colors.grey,
-        isCustom: true,
+    if (text.isEmpty) return;
+    if (categoryNameExists(
+      _userCategories.map((category) => category.name),
+      text,
+    )) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('A category with this name already exists')),
       );
-      
-      setState(() {
-        _userCategories.add(newCategory);
-        _categoryController.clear();
-      });
+      return;
     }
+
+    final newCategory = SpendingCategory(
+      name: text,
+      icon: Icons.category,
+      color: Colors.grey,
+      isCustom: true,
+    );
+
+    setState(() {
+      _userCategories.add(newCategory);
+      _categoryController.clear();
+    });
   }
 
   void _removeCategory(SpendingCategory category) {
@@ -103,11 +113,18 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
   }
 
   void _addSuggestedCategory(SpendingCategory category) {
-    if (!_userCategories.contains(category)) {
-      setState(() {
-        _userCategories.add(category);
-      });
+    if (categoryNameExists(
+      _userCategories.map((existing) => existing.name),
+      category.name,
+    )) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('A category with this name already exists')),
+      );
+      return;
     }
+    setState(() {
+      _userCategories.add(category);
+    });
   }
 
   Future<void> _saveChanges() async {
@@ -338,7 +355,10 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
                         spacing: 8,
                         runSpacing: 8,
                         children: _suggestedCategories
-                            .where((category) => !_userCategories.contains(category))
+                            .where((category) => !categoryNameExists(
+                                  _userCategories.map((existing) => existing.name),
+                                  category.name,
+                                ))
                             .map((category) {
                           return _buildCategoryChip(category, false);
                         }).toList(),

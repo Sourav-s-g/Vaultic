@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'supabase_service.dart';
+import '../utils/category_name.dart';
 
 class HybridStorageService {
   static const String _lastSyncKey = 'vaultic_last_sync_v1';
@@ -24,42 +25,61 @@ class HybridStorageService {
   static Future<List<Map<String, dynamic>>> getCategories() async {
     if (_isAuthenticated) {
       try {
-        final cloudData = await SupabaseService.getCategories();
+        final cloudData = deduplicateCategories(
+          await SupabaseService.getCategories(),
+        );
         await _saveToLocal(_categoriesKey, cloudData);
         return cloudData;
       } catch (_) {}
     }
-    return await _getFromLocal(_categoriesKey);
+    final localData = deduplicateCategories(
+      await _getFromLocal(_categoriesKey),
+    );
+    await _saveToLocal(_categoriesKey, localData);
+    return localData;
   }
 
   static Future<void> saveCategories(
     List<Map<String, dynamic>> categories,
   ) async {
-    await _saveToLocal(_categoriesKey, categories);
+    final uniqueCategories = deduplicateCategories(categories);
+    await _saveToLocal(_categoriesKey, uniqueCategories);
     if (_isAuthenticated) {
-      try {
-        await SupabaseService.saveCategories(categories);
-      } catch (_) {}
+      await SupabaseService.saveCategories(uniqueCategories);
     }
   }
 
-  static Future<void> addCategory(Map<String, dynamic> category) async {
+  static Future<bool> addCategory(Map<String, dynamic> category) async {
     final categories = await getCategories();
     final name = (category['name'] ?? '').toString();
-    if (name.isNotEmpty && !categories.any((c) => (c['name'] ?? '') == name)) {
-      categories.add(category);
-      await saveCategories(categories);
+    if (name.trim().isEmpty ||
+        categoryNameExists(
+          categories.map((c) => (c['name'] ?? '').toString()),
+          name,
+        )) {
+      return false;
     }
+    categories.add(category);
+    await saveCategories(categories);
+    return true;
   }
 
   static Future<void> removeCategoryByName(String name) async {
     final categories = await getCategories();
-    categories.removeWhere((c) => (c['name'] ?? '') == name);
+    final normalizedName = normalizeCategoryName(name);
+    final storedNames = categories
+        .map((c) => (c['name'] ?? '').toString())
+        .where((stored) => normalizeCategoryName(stored) == normalizedName)
+        .toList();
+    final nameToRemove = storedNames.isEmpty ? name : storedNames.first;
+    categories.removeWhere(
+      (c) => (c['name'] ?? '').toString() == nameToRemove,
+    );
     await _saveToLocal(_categoriesKey, categories);
     if (_isAuthenticated) {
-      await SupabaseService.deleteCategory(name);
+      await SupabaseService.deleteCategory(nameToRemove);
     }
-    await removeBudget(name);
+    await removeBudget(nameToRemove);
   }
 
   static Future<List<Map<String, dynamic>>> getTransactions() async {
@@ -535,7 +555,9 @@ class HybridStorageService {
     if (!_isAuthenticated) return false;
     try {
       final cloudTransactions = await SupabaseService.getTransactions();
-      final cloudCategories = await SupabaseService.getCategories();
+      final cloudCategories = deduplicateCategories(
+        await SupabaseService.getCategories(),
+      );
       final cloudBudgets = await SupabaseService.getBudgets();
       final cloudOwoEntries = await SupabaseService.getOwoEntries();
       await _saveToLocal(_transactionsKey, cloudTransactions);

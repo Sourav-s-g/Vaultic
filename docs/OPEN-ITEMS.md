@@ -35,3 +35,17 @@ The authoritative snapshot is [`docs/supabase/schema-snapshot.md`](./supabase/sc
 - Category and matching-budget deletion currently use separate PostgREST requests. If the budget deletion fails, the app attempts to restore the category and reports both failures, but this compensation is not atomic; a failed restore can leave the category deleted. A transactional server-side operation is required for a guaranteed all-or-nothing delete.
 - Cross-tab edit conflicts are guarded by `(user_id, transaction_id, updated_at)` and stale categories are rechecked before save, but the race paths are not exercised by browser tests.
 - The 360px browser viewport covers responsive interactions, not a real mobile virtual keyboard or safe-area behavior on a physical iOS/Android device.
+
+## Flutter Category Name Comparisons
+
+Flutter category creation and lookup now use trimmed, whitespace-collapsed, case-insensitive names, while preserving original display/storage text. Existing transaction category strings, grouping, summary calculations, and budget keys are intentionally unchanged. Consequently, records with category text such as `food` can still be grouped separately from category `Food`; these locations remain case-sensitive:
+
+- `lib/HomePage.dart:1157` filters monthly category totals by exact transaction/category text; `lib/HomePage.dart:1402-1407` groups monthly debit totals by the raw transaction category string.
+- `lib/screens/transaction_history_screen.dart:352` groups history totals by the raw transaction category string.
+- `lib/screens/category_transactions_screen.dart:38` filters transactions by exact category text; `lib/screens/category_transactions_screen.dart:47` retrieves the budget with the exact category key.
+- `lib/screens/trip_page.dart:165,938,1047` reads category budgets by exact map keys; `lib/screens/trip_page.dart:918,1306` filters transactions by exact category text; `lib/screens/trip_page.dart:1021-1025` groups transactions by the raw category string.
+- `lib/services/html_pdf_service.dart:332-336` groups PDF totals by exact category text; `lib/services/pdf_service.dart:270` groups PDF breakdowns by exact category text.
+- `lib/services/local_storage.dart:211,217` and `lib/services/hybrid_storage_service.dart:220,226` store/remove local budgets by exact string keys; `lib/services/supabase_service.dart:228` builds its budget map using exact category keys.
+- `lib/HomePage.dart:1978,2061` keys trip budget controllers by exact category strings.
+
+The proposed database unique index on `(user_id, lower(name))` prevents case-only duplicates, but does not collapse repeated internal whitespace. App-side duplicate checks collapse repeated whitespace; strict database-level enforcement of that additional normalization would require a different index expression.

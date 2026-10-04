@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/category_name.dart';
 
 class HybridStorageService {
   static const String _categoriesKey = 'vaultic_categories_v1';
@@ -18,7 +19,12 @@ class HybridStorageService {
     if (raw == null || raw.isEmpty) return [];
     final decoded = jsonDecode(raw);
     if (decoded is List) {
-      return decoded.cast<Map<String, dynamic>>();
+      final categories =
+          deduplicateCategories(decoded.cast<Map<String, dynamic>>());
+      if (categories.length != decoded.length) {
+        await prefs.setString(_categoriesKey, jsonEncode(categories));
+      }
+      return categories;
     }
     return [];
   }
@@ -27,14 +33,20 @@ class HybridStorageService {
     List<Map<String, dynamic>> categories,
   ) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_categoriesKey, jsonEncode(categories));
+    await prefs.setString(
+      _categoriesKey,
+      jsonEncode(deduplicateCategories(categories)),
+    );
   }
 
   static Future<void> addCategory(Map<String, dynamic> category) async {
     final categories = await getCategories();
-    // Avoid duplicates by name
     final name = (category['name'] ?? '').toString();
-    if (name.isNotEmpty && !categories.any((c) => (c['name'] ?? '') == name)) {
+    if (name.trim().isNotEmpty &&
+        !categoryNameExists(
+          categories.map((c) => (c['name'] ?? '').toString()),
+          name,
+        )) {
       categories.add(category);
       await saveCategories(categories);
     }
@@ -42,10 +54,18 @@ class HybridStorageService {
 
   static Future<void> removeCategoryByName(String name) async {
     final categories = await getCategories();
-    categories.removeWhere((c) => (c['name'] ?? '') == name);
+    final normalizedName = normalizeCategoryName(name);
+    final storedNames = categories
+        .map((c) => (c['name'] ?? '').toString())
+        .where((stored) => normalizeCategoryName(stored) == normalizedName)
+        .toList();
+    final nameToRemove = storedNames.isEmpty ? name : storedNames.first;
+    categories.removeWhere(
+      (c) => (c['name'] ?? '').toString() == nameToRemove,
+    );
     await saveCategories(categories);
     // Also remove budget for this category
-    await removeBudget(name);
+    await removeBudget(nameToRemove);
     // Optionally, you might also want to remove transactions of this category.
   }
 

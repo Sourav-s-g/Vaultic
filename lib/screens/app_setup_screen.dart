@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../HomePage.dart';
 import '../services/hybrid_storage_service.dart';
+import '../utils/category_name.dart';
 
 class AppSetupScreen extends StatefulWidget {
   final String userEmail;
@@ -50,19 +51,28 @@ class _AppSetupScreenState extends State<AppSetupScreen> {
 
   void _addCustomCategory() {
     final text = _categoryController.text.trim();
-    if (text.isNotEmpty) {
-      final newCategory = SpendingCategory(
-        name: text,
-        icon: Icons.category,
-        color: Colors.grey,
-        isCustom: true,
+    if (text.isEmpty) return;
+    if (categoryNameExists(
+      _selectedCategories.map((category) => category.name),
+      text,
+    )) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('A category with this name already exists')),
       );
-      
-      setState(() {
-        _selectedCategories.add(newCategory);
-        _categoryController.clear();
-      });
+      return;
     }
+
+    final newCategory = SpendingCategory(
+      name: text,
+      icon: Icons.category,
+      color: Colors.grey,
+      isCustom: true,
+    );
+
+    setState(() {
+      _selectedCategories.add(newCategory);
+      _categoryController.clear();
+    });
   }
 
   void _removeCategory(SpendingCategory category) {
@@ -72,12 +82,23 @@ class _AppSetupScreenState extends State<AppSetupScreen> {
   }
 
   void _toggleCategory(SpendingCategory category) {
-    setState(() {
-      if (_selectedCategories.contains(category)) {
+    if (_selectedCategories.contains(category)) {
+      setState(() {
         _selectedCategories.remove(category);
-      } else {
-        _selectedCategories.add(category);
-      }
+      });
+      return;
+    }
+    if (categoryNameExists(
+      _selectedCategories.map((selected) => selected.name),
+      category.name,
+    )) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('A category with this name already exists')),
+      );
+      return;
+    }
+    setState(() {
+      _selectedCategories.add(category);
     });
   }
 

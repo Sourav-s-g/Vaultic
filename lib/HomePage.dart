@@ -17,6 +17,7 @@ import 'services/trip_storage_service.dart';
 import 'screens/trip_page.dart';
 import 'models/parsed_transaction.dart';
 import 'services/smart_input_parser.dart';
+import 'utils/category_name.dart';
 
 class Homepage extends StatelessWidget {
   const Homepage({super.key});
@@ -218,9 +219,33 @@ class _VaulticDashboardPageState extends State<VaulticDashboardPage> {
         ],
       ),
     );
+    if (!mounted) return;
     if (name != null && name.isNotEmpty) {
-      await HybridStorageService.addCategory({'name': name});
-      _loadCategories();
+      if (categoryNameExists(_categories, name)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('A category with this name already exists'),
+          ),
+        );
+        return;
+      }
+      try {
+        final added = await HybridStorageService.addCategory({'name': name});
+        if (!added && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('A category with this name already exists'),
+            ),
+          );
+        }
+        await _loadCategories();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not add category: $e')),
+          );
+        }
+      }
     }
   }
 
