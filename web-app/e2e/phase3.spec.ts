@@ -27,7 +27,12 @@ async function setSession(page: import("@playwright/test").Page) {
 
 async function resetBackend(
   request: import("@playwright/test").APIRequestContext,
-  data: { categories?: object[]; budgets?: object[]; transactions?: object[] } = {},
+  data: {
+    categories?: object[];
+    budgets?: object[];
+    transactions?: object[];
+    categoryInsertError?: boolean;
+  } = {},
 ) {
   await request.post(`${mockUrl}/__test/reset`, { data });
 }
@@ -57,12 +62,17 @@ test("protects workspace routes and requires a category during onboarding", asyn
 
 test("adds and removes categories without rewriting transaction history", async ({ page, request }) => {
   await resetBackend(request, {
-    categories: [{ name: "Food", color: "#FF9800", icon: "utensils" }],
-    budgets: [{ category: "Food" }],
+    categoryInsertError: true,
+    categories: [{ name: "fOoD", color: "#FF9800", icon: "utensils" }],
+    budgets: [{ category: "fOoD" }],
     transactions: [{ transaction_id: "history-1", description: "Lunch", amount: 120, type: "Debit", date: "2024-01-31T00:00:00.000", category: "Food" }],
   });
   await page.goto("/categories");
   await page.getByLabel("Category name").fill("Pets");
+  await page.getByRole("button", { name: "Add category" }).click();
+  await expect(page.locator(".inline-error")).toHaveText("A category with this name already exists.");
+  await expect(page.getByLabel("Category name")).toHaveValue("Pets");
+
   await page.getByRole("button", { name: "Add category" }).click();
   await expect(page.getByRole("status")).toContainText("Pets added.");
 
@@ -70,16 +80,17 @@ test("adds and removes categories without rewriting transaction history", async 
   await page.getByRole("button", { name: "Add category" }).click();
   await expect(page.locator(".inline-error")).toContainText("already exists");
 
-  await page.getByRole("button", { name: "Remove Food" }).click();
+  await page.getByRole("button", { name: "Remove fOoD" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Transactions keep their existing category text");
   await dialog.getByRole("button", { name: "Remove category" }).click();
-  await expect(page.getByRole("status")).toContainText("Food removed.");
+  await expect(page.getByRole("status")).toContainText("fOoD removed.");
   const state = await (await request.get(`${mockUrl}/__test/state`)).json();
   expect(state.categories.map((row: { name: string }) => row.name)).toEqual(["Pets"]);
   expect(state.budgets).toHaveLength(0);
   expect(state.transactions).toHaveLength(1);
   expect(state.transactions[0].category).toBe("Food");
+  expect(state.lastRpcCall).toEqual({ function: "delete_category", args: { p_category_name: "fOoD" } });
 });
 
 test("creates, edits, searches and deletes transactions with an undo path", async ({ page, request }) => {
@@ -105,6 +116,7 @@ test("creates, edits, searches and deletes transactions with an undo path", asyn
   await expect(page.locator(".transaction-row").getByText("Old coffee ☕", { exact: true })).toBeVisible();
   await expect(page.locator(".transaction-row").getByText("Coffee ☕", { exact: true })).toBeVisible();
   await page.getByLabel("Search description or category").fill("nothing matches");
+  await expect(page.getByText("Search: nothing matches")).toBeVisible();
   await expect(page.getByText("No transactions match this search.")).toBeVisible();
   await page.getByLabel("Search description or category").fill("");
 

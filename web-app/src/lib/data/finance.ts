@@ -4,18 +4,15 @@ import { serializeFlutterLocalDateTime } from "@/lib/dates";
 import { databaseAmountToPaise, paiseToDatabaseAmount } from "@/lib/money";
 import { createClient } from "@/lib/supabase/browser";
 import type { Database } from "@/types/database.types";
+import { CategoryAlreadyExistsError, throwIfCategoryUniqueViolation } from "./category-errors";
+import { categoryDeleteRpcArgs } from "./category-rpc";
+
+export { CategoryAlreadyExistsError } from "./category-errors";
 
 export type CategoryRow = Database["public"]["Tables"]["categories"]["Row"];
 export type TransactionRow = Database["public"]["Tables"]["transactions"]["Row"];
 export type TransactionPage = { items: TransactionRow[]; total: number };
 export const TRANSACTION_PAGE_SIZE = 20;
-
-export class CategoryAlreadyExistsError extends Error {
-  constructor(name: string) {
-    super(`A category named "${name}" already exists.`);
-    this.name = "CategoryAlreadyExistsError";
-  }
-}
 
 export class CategoryUnavailableError extends Error {
   constructor(name: string) {
@@ -66,7 +63,7 @@ export async function getCategories(expectedUserId?: string): Promise<CategoryRo
 
 async function assertCategoryDoesNotExist(userId: string, name: string): Promise<void> {
   const categories = await getCategories(userId);
-  if (duplicateCategory(categories, name)) throw new CategoryAlreadyExistsError(name.trim());
+  if (duplicateCategory(categories, name)) throw new CategoryAlreadyExistsError();
 }
 
 export async function addCategory(draft: CategoryDraft, expectedUserId: string): Promise<CategoryRow> {
@@ -80,6 +77,7 @@ export async function addCategory(draft: CategoryDraft, expectedUserId: string):
     .select("*")
     .single();
   if (!error && data) return data;
+  if (error) throwIfCategoryUniqueViolation(error);
 
   try {
     await assertCategoryDoesNotExist(userId, normalized.name);
@@ -98,7 +96,7 @@ export async function addCategories(
   const normalizedNames = new Set<string>();
   for (const draft of drafts) {
     const normalized = normalizeCategoryName(createCategoryDraft(draft.name).name);
-    if (normalizedNames.has(normalized)) throw new CategoryAlreadyExistsError(draft.name.trim());
+    if (normalizedNames.has(normalized)) throw new CategoryAlreadyExistsError();
     normalizedNames.add(normalized);
   }
 
@@ -117,42 +115,11 @@ export async function removeCategory(name: string, expectedUserId: string): Prom
   const userId = await getAuthenticatedUserId(expectedUserId);
   const categories = await getCategories(userId);
   const category = categories.find((item) => normalizeCategoryName(item.name) === normalizeCategoryName(name));
-
-  if (category) {
-    const { error } = await client()
-      .from("categories")
-      .delete()
-      .eq("user_id", userId)
-      .eq("name", category.name)
-      .select("id");
-    if (error) throw new Error(`Could not remove category: ${error.message}`);
-  }
-
-  const { error: budgetError } = await client()
-    .from("budgets")
-    .delete()
-    .eq("user_id", userId)
-    .eq("category", category?.name ?? name.trim())
-    .select("id");
-
-  if (budgetError) {
-    if (category) {
-      const { error: restoreError } = await client()
-        .from("categories")
-        .insert({
-          user_id: userId,
-          name: category.name,
-          color: category.color,
-          icon: category.icon,
-          created_at: category.created_at,
-          updated_at: category.updated_at,
-        });
-      if (restoreError) {
-        throw new Error(`Budget removal failed (${budgetError.message}); category restoration also failed (${restoreError.message}).`);
-      }
-    }
-    throw new Error(`Could not remove the category budget: ${budgetError.message}`);
-  }
+  const { error } = await client().rpc(
+    "delete_category",
+    categoryDeleteRpcArgs(category?.name ?? name.trim()),
+  );
+  if (error) throw new Error(`Could not remove category: ${error.message}`);
 }
 
 function escapeLikePattern(value: string): string {

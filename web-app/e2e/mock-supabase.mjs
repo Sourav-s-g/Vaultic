@@ -5,6 +5,8 @@ const userId = "b7b7c3b4-16aa-48d8-a0aa-6d98490c31ef";
 let categories = [];
 let budgets = [];
 let transactions = [];
+let rejectNextCategoryInsert = false;
+let lastRpcCall = null;
 
 function send(response, status, body, extraHeaders = {}) {
   response.writeHead(status, {
@@ -114,10 +116,12 @@ const server = createServer(async (request, response) => {
     categories = (body.categories ?? []).map((row) => seedRow("categories", row));
     budgets = (body.budgets ?? []).map((row) => seedRow("budgets", row));
     transactions = (body.transactions ?? []).map((row) => seedRow("transactions", row));
+    rejectNextCategoryInsert = body.categoryInsertError === true;
+    lastRpcCall = null;
     return send(response, 200, { status: "reset" });
   }
   if (url.pathname === "/__test/state") {
-    return send(response, 200, { categories, budgets, transactions });
+    return send(response, 200, { categories, budgets, transactions, lastRpcCall });
   }
   if (url.pathname === "/auth/v1/user") {
     if (request.headers.authorization !== "Bearer mock-access-token") {
@@ -131,6 +135,19 @@ const server = createServer(async (request, response) => {
   }
   if (url.pathname.startsWith("/rest/v1/")) {
     const tableName = url.pathname.slice("/rest/v1/".length);
+    if (tableName === "rpc/delete_category" && request.method === "POST") {
+      const body = await readBody(request);
+      lastRpcCall = { function: "delete_category", args: body };
+      const name = String(body.p_category_name ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase();
+      const category = categories.find((row) =>
+        row.user_id === userId &&
+        String(row.name ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase() === name);
+      if (category) {
+        categories = categories.filter((row) => row !== category);
+        budgets = budgets.filter((row) => !(row.user_id === userId && row.category === category.name));
+      }
+      return send(response, 204);
+    }
     const table = tableFor(tableName);
     if (!table) return send(response, 404, { message: "Unknown table" });
 
@@ -145,13 +162,18 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST") {
       const inserted = [];
       for (const input of inputs) {
+        if (tableName === "categories" && rejectNextCategoryInsert) {
+          rejectNextCategoryInsert = false;
+          return send(response, 409, { code: "23505", message: "duplicate category" });
+        }
         if (tableName === "transactions") {
           const existing = transactions.find((row) => row.user_id === input.user_id && row.transaction_id === input.transaction_id);
           if (existing && prefer.includes("resolution=ignore-duplicates")) continue;
           if (existing) return send(response, 409, { code: "23505", message: "duplicate key" });
         }
         if (tableName === "categories" && categories.some((row) =>
-          row.user_id === input.user_id && row.name.toLocaleLowerCase() === input.name.toLocaleLowerCase())) {
+          row.user_id === input.user_id &&
+          row.name.trim().replace(/\s+/g, " ").toLocaleLowerCase() === input.name.trim().replace(/\s+/g, " ").toLocaleLowerCase())) {
           return send(response, 409, { code: "23505", message: "duplicate category" });
         }
         const row = seedRow(tableName, input);
