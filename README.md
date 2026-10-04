@@ -1,5 +1,25 @@
 # Vaultic
 
+Vaultic is a Flutter personal-finance app with a separate Next.js web application in `web-app/`. The Flutter application and its root `web/` platform target remain separate from the Vercel deployment.
+
+## Vaultic Web
+
+The web application uses Next.js App Router, strict TypeScript, Supabase SSR clients, TanStack Query, and Tailwind CSS. Its Vercel root is `web-app/`. Email/password authentication and recovery are implemented; finance data features are delivered in later phases.
+
+Run the web application from its own directory:
+
+```sh
+cd web-app
+npm ci
+npm run dev
+```
+
+Copy `web-app/.env.example` to an untracked local environment file and provide the Supabase URL and public anon key before using Supabase-backed features. Never add service-role credentials or a production origin to source control. For Vercel setup and password-reset redirect configuration, follow [docs/DEPLOY.md](docs/DEPLOY.md).
+
+The web CI workflow runs in `web-app/`; its available quality checks are `npm run lint`, `npm run typecheck`, and `npm run build`. `/api/health` returns a status-only response for deployment checks.
+
+---
+
 Vaultic is a Flutter application scaffold. This README is a comprehensive, ready-to-use guide to help you develop, run, test, build, and ship the app. It includes recommended workflows, configuration tips, troubleshooting, and sections you can customize for your project's needs.
 
 > NOTE: Replace placeholder sections (marked with **TODO**) with project-specific details (screenshots, feature list, API keys, design decisions).

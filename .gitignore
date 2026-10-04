@@ -62,3 +62,10 @@ credentials/
 # Build configuration files
 build_config.dart
 config.dart
+
+# Vaultic Next.js application (Flutter's root web/ target is intentionally retained)
+/web-app/node_modules/
+/web-app/.next/
+/web-app/out/
+/web-app/.env*
+!/web-app/.env.example

@@ -1,0 +1,1 @@
+The canonical, current Vaultic Web engineering policy is [../../.github/copilot-instructions.md](../../.github/copilot-instructions.md). This file is retained only as a pointer; do not use it as an independent or conflicting policy source.
