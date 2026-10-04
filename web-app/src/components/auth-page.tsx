@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Landmark } from "lucide-react";
 import { useEffect, useState } from "react";
 import { safeNextPath } from "@/lib/auth/safe-next-path";
+import { getCategories } from "@/lib/data/finance";
 import { createClient } from "@/lib/supabase/browser";
 
 type AuthMode = "login" | "signup" | "forgot";
@@ -77,6 +78,7 @@ export function AuthPage({
     }
 
     setBusy(true);
+    let authenticated = false;
     try {
       const supabase = createClient();
 
@@ -89,7 +91,13 @@ export function AuthPage({
           setError("We couldn't sign you in. Check your email and password, then try again.");
           return;
         }
-        router.replace(safeDestination);
+        authenticated = true;
+        const destination = nextPath
+          ? safeDestination
+          : (await getCategories()).length === 0
+            ? "/setup"
+            : "/";
+        router.replace(destination);
         router.refresh();
         return;
       }
@@ -114,7 +122,13 @@ export function AuthPage({
           setMessage("Your account is created. Check your email to confirm it, then log in.");
           return;
         }
-        router.replace(safeDestination);
+        authenticated = true;
+        const destination = nextPath
+          ? safeDestination
+          : (await getCategories()).length === 0
+            ? "/setup"
+            : "/";
+        router.replace(destination);
         router.refresh();
         return;
       }
@@ -128,9 +142,11 @@ export function AuthPage({
       }
       setMessage("If an account exists for this email, a password-reset link has been sent.");
     } catch {
-      setError(isForgot
-        ? "We couldn't request a reset link right now. Please try again."
-        : "We couldn't complete that request. Please try again.");
+      setError(authenticated
+        ? "You're signed in, but we couldn't load your categories. Reload the page to try again."
+        : isForgot
+          ? "We couldn't request a reset link right now. Please try again."
+          : "We couldn't complete that request. Please try again.");
     } finally {
       setBusy(false);
     }

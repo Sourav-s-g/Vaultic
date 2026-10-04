@@ -10,7 +10,7 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("Vaultic route error", error);
+    if (error.digest) console.error("Vaultic route error", error.digest);
   }, [error]);
 
   return (

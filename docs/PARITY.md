@@ -5,9 +5,9 @@ This document records the Phase 0 audit of Flutter behavior and the user's appro
 ## Scope And Repository Constraints
 
 - Reviewed `lib/` entry/auth/dashboard/screens/widgets/models/services/config, including `main.dart`, auth forms and gate, `HomePage.dart`, all screen files, `QuickAddBar`, storage and Supabase services, the smart input parser, and PDF generation.
-- At the time of the initial audit there was no schema snapshot. The current `docs/supabase/schema-snapshot.md` contains only `public.delete_user_account()`; table DDL, constraints, indexes, and RLS policies remain absent.
+- The authoritative checked-in snapshot is [`docs/supabase/schema-snapshot.md`](./supabase/schema-snapshot.md). It records constraints, columns, RLS status and policies for seven tables. `public.delete_user_account()` is retained in the snapshot but remains out of scope for the web app.
 - Root `web/` remains Flutter's web target (`index.html`, `manifest.json`, `icons/`, `splash/`, and `.github/`). The Next.js app is now separately scaffolded in `web-app/`; Flutter's target was left untouched.
-- `web-app/src/types/database.types.ts` contains explicitly provisional shapes inferred from Flutter client payloads because the snapshot has no table definitions. They are not generated or verified types.
+- `web-app/src/types/database.types.ts` reflects the checked-in snapshot’s column names, nullability, defaults and constraints. The actual web inserts still explicitly set authenticated `user_id` for tables where it is nullable.
 - There is no `providers/` directory or separate app-wide provider layer in `lib/`. State and data orchestration live in screen state and static storage/service classes.
 
 ## Route And Screen Parity Matrix
@@ -42,13 +42,13 @@ Web routes below are proposed mappings, not existing routes. At desktop, the sam
 
 ## Supabase And Auth Contracts Found In Source
 
-No table DDL, schema migration, or RLS policy is present in the repository. The checked-in snapshot contains one SQL function, described below. Table names and payload fields in this audit are observed from Flutter client code, not verified database declarations. All user-scoped table operations use the authenticated `user_id` in client filters/payloads in addition to whatever server-side policies are configured.
+The checked-in schema snapshot is at `docs/supabase/schema-snapshot.md`. It now verifies table columns, constraints and RLS status/policies; the contracts below remain distinct from client behavior described in Flutter. Every web query and write must additionally use the authenticated session user ID because `user_id` is nullable on several tables. RLS remains the authorization boundary.
 
 | Table | Observed operations and fields | Notes / unknowns |
 |---|---|---|
-| `categories` | Select all filtered `user_id`, order `created_at`; existence query by `user_id` + `name`; insert `{user_id, name, color, icon}` with defaults `#FF6B6B` / `category`; delete filtered by `user_id` + `name`. | Save is insert-if-missing, not replacement/update. Case sensitivity/unique constraint and cascading behavior are not known. Category-management sends only names and therefore takes service defaults. |
-| `transactions` | Select all filtered `user_id`, order `date DESC`; existence query by `user_id` + `transaction_id`; insert `{user_id, transaction_id, description, amount, type, date, category, status}` and optionally `is_split`, `split_count`; update/delete filtered by user and transaction ID. | Carry-forward is also stored here as a Credit transaction. The app's dedupe is read-before-insert and does not prove a database unique constraint. `amount` is consumed as a number/double. |
-| `budgets` | Select by `user_id`; upsert `{user_id, category, amount}` with `onConflict: 'user_id, category'`. | No explicit delete query exists. Saving iterates/upserts provided map entries; removing a local budget does not remove its remote row. Requires matching unique constraint for upsert, inferred by the code but not verified. |
+| `categories` | Select all filtered `user_id`, order `created_at`; existence query by `user_id` + `name`; insert `{user_id, name, color, icon}` with defaults `#FF6B6B` / `category`; delete filtered by `user_id` + `name`. | Snapshot confirms `id` UUID, nullable `user_id`, required `name`, nullable `color`, `icon`, `created_at`, `updated_at`; no unique name constraint exists. Case-insensitive uniqueness is enforced in the web app and proposed as a partial-stage SQL index, not applied. |
+| `transactions` | Select all filtered `user_id`, order `date DESC`; existence query by `user_id` + `transaction_id`; insert `{user_id, transaction_id, description, amount, type, date, category, status}` and optionally `is_split`, `split_count`; update/delete filtered by user and transaction ID. | Snapshot confirms `UNIQUE (user_id, transaction_id)`, numeric `amount`, `type` check `Credit`/`Debit`, `date` timestamptz and nullable `updated_at` defaulting to now. Web create uses ignore-duplicates upsert; edits compare the loaded `updated_at`. The cross-client updated-at trigger is proposed but not applied. |
+| `budgets` | Select by `user_id`; upsert `{user_id, category, amount}` with `onConflict: 'user_id, category'`. | Snapshot confirms `UNIQUE (user_id, category)`, UUID id, numeric amount and nullable `user_id`. Flutter does not delete remote budgets during category removal; the web explicitly deletes the matching budget scoped to `user_id` and category. |
 | `owo_entries` | Select by `user_id`, order `created_at DESC`; insert `{user_id, owo_id, counterparty, direction, amount, note, created_at, due_date, settled}`; update/delete by `user_id` + `owo_id`. | Stable client ID uses `owo_id`; internal `id` is distinct per source comments/serialization. `isNegativeBalance` is local-only and is not sent. Required constraints and uniqueness are unknown. |
 | `user_settings` | Select `initial_balance` by `user_id`; upsert `{user_id, initial_balance, updated_at}`. | Explicitly treated as optional: reads/writes swallow PostgREST `PGRST205` when table is absent. Actual existence, key constraints, and RLS are unknown. |
 | `trips` | Select by `user_id`, order `created_at DESC`; upsert `user_id, trip_id, name, categories, created_at, start_date, end_date, description, budget, category_budgets` with `onConflict: 'trip_id'`; delete filtered by user and trip ID. | Service comment asserts `trip_id` is the primary key. Missing-table errors are treated as no trips/no-op. Payload suggests arrays/JSON fields but actual PostgreSQL types are not checked in. |
@@ -58,7 +58,13 @@ No table DDL, schema migration, or RLS policy is present in the repository. The 
 
 **Supabase Auth methods:** `auth.signUp(email, password)`, `auth.signInWithPassword(email, password)`, `auth.resetPasswordForEmail(email, redirectTo: 'io.vaultic.app://reset-password')`, `auth.updateUser(UserAttributes(password: ...))`, `auth.signOut()`, `auth.currentSession/currentUser`, and `auth.onAuthStateChange` for `passwordRecovery`. Client initializes `AuthFlowType.pkce`. No `signInWithOtp`, `verifyOTP`, phone auth, or email OTP method exists in the reviewed code.
 
-**RLS assumptions to verify before data features:** the UI/service filters suggest per-user ownership (`user_id = auth.uid()`) for all user data tables, with select/insert/update/delete matching each feature. These are assumptions only; the Flutter client sending a user ID is not a security boundary. The repository does not prove RLS is enabled, correct, or complete. Verify actual policies before implementing data operations.
+**Verified RLS:** `docs/supabase/schema-snapshot.md` records RLS enabled on all seven tables and policies using `auth.uid() = user_id`. The web still filters each query and sets `user_id` from `supabase.auth.getUser()` because RLS is a boundary, not a reason to omit ownership filters; nullable `user_id` columns must never be inserted as null.
+
+**Trip key warning:** the snapshot confirms `trips.trip_id` and `trip_transactions.transaction_id` are text primary keys, not composite per-user keys. Trip data remains out of scope; Phase 6 must generate UUIDs and verify the global key design before implementing trip persistence.
+
+## Transaction Date Serialization
+
+Flutter's transaction date picker constructs local `DateTime` values. `HomePage._showAddTransactionDialog`, `TransactionHistoryScreen._showEditDialog`, and `CategoryTransactionsScreen` serialize them with `DateTime.toIso8601String()`; local `DateTime` serialization has no UTC offset. `Transaction.fromJson`, `HomePage._transactionFromMap`, and the history mapping use `DateTime.tryParse` and do not call `toLocal()` or `toUtc()`. The web date-only form therefore serializes the selected calendar day as `YYYY-MM-DDT00:00:00.000` with no offset, matching Flutter's local-wall-time string convention. When Supabase returns a timestamp with an offset, the web derives the same calendar fields Flutter derives from that parsed instant and never parses a date-only value with JavaScript's UTC date-only interpretation.
 
 ## Exact Color Constants
 
@@ -146,7 +152,11 @@ These decisions were approved for Phase 1 and later implementation. Every fix or
 ### Intentional Changes
 
 - Require amounts greater than zero for all monetary inputs, reject non-finite values, and perform calculations in integer paise.
+- Reject invalid transaction edit amounts with a visible validation error instead of silently retaining the prior amount.
+- Reject blank or case-insensitive duplicate category names after trimming, including unsaved setup selections.
 - Require confirmation before deleting a transaction.
+- When removing a category, delete only its category and matching budget rows scoped to the authenticated user; preserve every transaction's stored category text.
+- Compare a transaction's loaded `updated_at` on edit and show a conflict/reload path instead of silently overwriting a concurrent change.
 - Default “This Month Spent” and category totals to the current month, with an All time switch.
 - Cap OWO partial payment/receipt at the remaining amount; warn when reopening a settled entry because its settlement transaction remains.
 - Make PDF end dates inclusive through end-of-day and calculate opening balance from all transactions before the selected range.
@@ -157,3 +167,5 @@ These decisions were approved for Phase 1 and later implementation. Every fix or
 - Use row-level trip-transaction mutations and preserve status/split fields when editing.
 - Do not port the standalone QuickAddBar or deprecated BankConnection screen.
 - Do not port account deletion to the web app.
+- Persist category `color` and `icon` in web category rows. Flutter's setup and category-management screens save only category names, so retaining the audited color/icon metadata in the database is a deliberate web behavior change.
+- Serialize a selected web transaction calendar date using Flutter's offsetless local `toIso8601String()` convention (`YYYY-MM-DDT00:00:00.000` for the date picker); use wall-calendar fields to avoid timezone shifts changing the selected day.
