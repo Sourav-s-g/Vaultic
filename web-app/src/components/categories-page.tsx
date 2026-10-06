@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Modal } from "@/components/modal";
-import { CategoryTiles } from "@/components/finance-ui";
+import { CategoryTiles, TopBar } from "@/components/finance-ui";
 import { createCategoryDraft, duplicateCategory, SUGGESTED_CATEGORIES } from "@/lib/categories/data";
 import {
   useAddCategory,
@@ -22,6 +22,7 @@ export function CategoriesPage() {
   const [message, setMessage] = useState("");
   const [pendingRemoval, setPendingRemoval] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const topBar = <TopBar title="Edit Categories" />;
 
   async function addCustom(event: React.FormEvent<HTMLFormElement>): Promise<boolean> {
     event.preventDefault();
@@ -75,17 +76,18 @@ export function CategoriesPage() {
   }
 
   if (user.isLoading || categories.isLoading) {
-    return <main className="feature-page" aria-busy="true"><div className="skeleton skeleton-title" /><div className="skeleton skeleton-panel" /></main>;
+    return <main className="feature-page">{topBar}<div aria-busy="true"><div className="skeleton skeleton-title" /><div className="skeleton skeleton-panel" /></div></main>;
   }
   if (user.error || categories.error) {
-    return <main className="feature-page"><section className="feature-panel" role="alert"><h1>Could not load categories</h1><p>{(user.error ?? categories.error)?.message}</p><button className="button button-primary" onClick={() => { void user.refetch(); void categories.refetch(); }} type="button">Try again</button></section></main>;
+    return <main className="feature-page">{topBar}<section className="feature-panel" role="alert"><h1>Could not load categories</h1><p>{(user.error ?? categories.error)?.message}</p><button className="button button-primary" onClick={() => { void user.refetch(); void categories.refetch(); }} type="button">Try again</button></section></main>;
   }
-  if (!user.data) return <main className="feature-page"><p role="status">Sign in to manage categories.</p></main>;
+  if (!user.data) return <main className="feature-page">{topBar}<p role="status">Sign in to manage categories.</p></main>;
 
   const rows = categories.data ?? [];
   const available = SUGGESTED_CATEGORIES.filter((item) => !duplicateCategory(rows, item.name));
   return (
     <main className="feature-page">
+      {topBar}
       <section className="feature-heading">
         <div><p className="eyebrow">ORGANIZE</p><h1>Categories</h1><p className="heading-copy">Manage spending labels without changing transaction history.</p></div>
       </section>

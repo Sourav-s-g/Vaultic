@@ -1,25 +1,48 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { ArrowDownRight, Plus, Trash2 } from "lucide-react";
-import type { ReactNode } from "react";
+import { ArrowDownRight, ArrowLeft, Plus, RefreshCw, Trash2 } from "lucide-react";
+import type { MouseEventHandler, ReactNode } from "react";
 import { DATA_COLORS, getCategoryColor, getCategoryIcon } from "@/lib/categories/data";
 import { cardForeground } from "@/lib/categories/contrast";
 import { SessionControls } from "@/components/session-controls";
 import { formatCardAmount } from "@/lib/money/card";
 
-export function AppHeader() {
-  const router = useRouter();
-
+export function DashboardHeader() {
   return (
-    <header className="app-mobile-header">
-      <Link className="app-mobile-title" href="/">Vaultic</Link>
+    <header className="dashboard-header">
+      <div className="dashboard-header-copy">
+        <h1>Dashboard</h1>
+        <p>Your personalised dashboard for your expenses</p>
+      </div>
       <div className="app-header-actions">
-        <button className="header-pill" onClick={() => router.refresh()} type="button">Refresh</button>
         <Link className="header-pill" href="/categories">Edit Categories</Link>
         <SessionControls />
       </div>
+    </header>
+  );
+}
+
+export function TopBar({
+  title,
+  isFetching = false,
+  onRefresh,
+}: {
+  title: string;
+  isFetching?: boolean;
+  onRefresh?: () => void;
+}) {
+  return (
+    <header className="route-topbar">
+      <Link aria-label="Back to Dashboard" className="topbar-back" href="/">
+        <ArrowLeft aria-hidden="true" size={24} />
+      </Link>
+      <h1 className="route-topbar-title" title={title}>{title}</h1>
+      {onRefresh && (
+        <button aria-label="Refresh" className="topbar-refresh" disabled={isFetching} onClick={onRefresh} type="button">
+          <RefreshCw aria-hidden="true" className={isFetching ? "is-spinning" : undefined} size={21} />
+        </button>
+      )}
     </header>
   );
 }
@@ -73,8 +96,8 @@ export function DashboardTabs() {
   );
 }
 
-export function FloatingAddButton() {
-  return <Link aria-label="Add transaction" className="mobile-add-button" href="/transactions?new=1"><Plus aria-hidden="true" size={23} /></Link>;
+export function FloatingAddButton({ onClick }: { onClick: MouseEventHandler<HTMLButtonElement> }) {
+  return <button aria-label="Add transaction" className="mobile-add-button" onClick={onClick} type="button"><Plus aria-hidden="true" size={23} /></button>;
 }
 
 export function CategoryTiles({

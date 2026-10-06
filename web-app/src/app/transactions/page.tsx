@@ -1,10 +1,10 @@
 import { TransactionsPage } from "@/components/transaction-list";
+import type { Metadata } from "next";
 
-type TransactionsSearchParams = Promise<Record<string, string | string[] | undefined>>;
+export const metadata: Metadata = {
+  title: "Transaction History · Vaultic",
+};
 
-export default async function TransactionsRoute({ searchParams }: { searchParams: TransactionsSearchParams }) {
-  const query = await searchParams;
-  const newValue = Array.isArray(query.new) ? query.new[0] : query.new;
-  const startOpen = newValue === "1";
-  return <TransactionsPage key={startOpen ? "new" : "list"} startOpen={startOpen} />;
+export default function TransactionsRoute() {
+  return <TransactionsPage />;
 }

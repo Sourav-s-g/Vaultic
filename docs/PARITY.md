@@ -170,3 +170,4 @@ These decisions were approved for Phase 1 and later implementation. Every fix or
 - Do not port account deletion to the web app.
 - Persist category `color` and `icon` in web category rows. Flutter's setup and category-management screens save only category names, so retaining the audited color/icon metadata in the database is a deliberate web behavior change.
 - Serialize a selected web transaction calendar date using Flutter's offsetless local `toIso8601String()` convention (`YYYY-MM-DDT00:00:00.000` for the date picker); use wall-calendar fields to avoid timezone shifts changing the selected day.
+- Center all dialogs horizontally and vertically at every viewport size. This intentionally reverses the earlier mobile bottom-sheet presentation rule.

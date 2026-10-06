@@ -25,6 +25,18 @@ export const DATA_COLORS = {
     "#FF5722",
     "#03A9F4",
   ],
+  history: [
+    "#FF9800",
+    "#9C27B0",
+    "#00BCD4",
+    "#009688",
+    "#FFC107",
+    "#FF4081",
+    "#3F51B5",
+    "#8BC34A",
+    "#607D8B",
+  ],
+  weekly: "#FFAB40",
 } as const;
 
 export type SuggestedCategoryName = keyof typeof DATA_COLORS.suggested;

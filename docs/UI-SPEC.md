@@ -1,11 +1,12 @@
 # Vaultic Web UI Specification
 
-This is the single presentation reference for the Phase 3.5 revision and later web phases. It describes layout and interaction only; it does not change data behavior.
+This is the single presentation reference for the Phase 4.5 revision and later web phases. It describes layout and interaction only; it does not change data behavior.
 
 ## Breakpoints and shell
 
-- **Mobile and tablet, below 1024px:** no bottom navigation bar. The workspace has a header with “Vaultic” left and “Edit Categories” plus “Logout” pill actions right; a horizontal scroll-snap category-card strip; an accessible tab row; grouped transaction rows; and a fixed bottom-right add button. Reserve bottom padding so the add button never covers content.
-- **Desktop, 1024px and wider:** retain the persistent sidebar. Main content may use up to approximately 1200px. Category cards become an auto-fill grid (`minmax(168px, 1fr)`) instead of a horizontal scroller. Keep a layout slot available for later summary/chart surfaces, but do not render them in Phase 3.5. At 1280px and wider, transactions may use two columns if this improves readability.
+- **Mobile and tablet, below 1024px:** no bottom navigation bar. The Dashboard header has “Dashboard” and the subline “Your personalised dashboard for your expenses”, with “Edit Categories” and “Logout” pill actions on the right (wrapping is allowed). A horizontal scroll-snap category-card strip, accessible tab row, grouped transaction rows, and fixed bottom-right add button are used where applicable. Reserve bottom padding so the add button never covers content.
+- **Desktop, 1024px and wider:** retain the persistent sidebar with Dashboard / Transaction History / Categories. Main content may use up to approximately 1200px. Dashboard category cards become an auto-fill grid (`minmax(168px, 1fr)`). Transaction history uses the order and responsive chart/list arrangement below.
+- **Shared TopBar:** every non-home page starts with a sticky bar below the safe-area inset, solid surface background, and bottom border. A clearly visible back arrow (24px icon, 44×44px target, 1px border, visible focus ring, accessible name “Back to Dashboard”) always navigates to `/`. The adjacent 20px medium title is truncated on one line. Transaction History and category-detail pages include a Refresh icon action which spins while fetching. Do not render a PDF action.
 - Chrome is black/grey and token-based; category data colors remain in the shared `DATA_COLORS` mapping.
 
 ## Shared presentational components
@@ -15,10 +16,32 @@ This is the single presentation reference for the Phase 3.5 revision and later w
 - **DashboardTabs:** an accessible tab list with a neutral underline for Transactions. Render only implemented tabs; later tabs are added when those capabilities exist.
 - **TransactionRow:** rounded card with category icon tile, description (up to two lines), muted date/category/Dr-or-Cr metadata, signed amount, and an always-visible trailing trash button. The whole non-control row opens edit. The trash action has a 44×44px target, descriptive accessible name, pointer tooltip, muted default styling, and destructive hover/focus/pressed states.
 - **FloatingAddButton:** fixed bottom-right on mobile, token-colored, safe-area aware, and paired with content bottom padding.
-- **Modal:** one shared native-dialog wrapper for transaction entry/edit, destructive confirmations, category add, and logout confirmation. It provides backdrop, browser focus containment, Escape handling, body-scroll lock, focus restoration, reduced-motion-aware transitions, and an internal scroll region. Desktop is centered with max width about 520px and max height 90dvh. Below 1024px it docks full-width to the bottom with a drag handle and safe-area padding. Forms keep their Save action visible while the body scrolls.
+- **Modal:** one shared native-dialog wrapper for transaction entry/edit, destructive confirmations, category add, and logout confirmation. It is centered horizontally and vertically at all sizes with width `min(92vw, 520px)`. It provides backdrop, browser focus containment, Escape handling, body-scroll lock, focus restoration, reduced-motion-aware transitions, visualViewport-aware positioning, safe-area padding, and an internal scrolling body. It is never a bottom sheet. Keep the Save action reachable while the body scrolls and the on-screen keyboard is open.
 - **Category tiles:** `/categories` and setup review use compact individual tiles, approximately 56px high. Phone layout uses two columns; wider screens auto-fill from 180px. Names are one-line ellipsized with a title tooltip and a 44px remove action. Suggested categories are compact selectable chips.
 
-Until Phase 4 adds summary data, category cards on `/transactions` show a dash rather than a fabricated total. Card values are formatted from integer paise, using en-IN INR grouping and suppressing `.00` only for whole rupees.
+The category card strip appears only on the Dashboard (`/`), never on `/transactions`. Card values are formatted from integer paise, using en-IN INR grouping and suppressing `.00` only for whole rupees.
+
+### Dashboard
+
+- Page heading is “Dashboard”; subline is exactly “Your personalised dashboard for your expenses”.
+- Browser tab title is “Dashboard · Vaultic”.
+- Dashboard uses the shared category cards, tabs, recent transactions, and in-place floating Add transaction dialog.
+
+### Transaction history
+
+- A compact previous / month label / next selector controls the monthly donut, summary, and transaction list.
+- Content order is category donut card, one-row three-value summary card (Monthly Income, Monthly Spent, Total Balance), weekly bar card, 56px search field, then grouped transaction list.
+- At desktop widths, the summary spans the full content width; donut and weekly chart share a row; the list spans full width. Do not render empty placeholder columns.
+- Donut segments use the history palette in the category order defined in `docs/PARITY.md`; segments are separated by thin card-colored strokes. Percentage labels are shown inside segments at 5% or more. The wrapped legend filters the list and includes a screen-reader text/table fallback.
+- Weekly chart starts weeks on Sunday and has independent previous/next navigation. Show a DD/MM - DD/MM range, y-axis title Amount with rupee ticks and solid horizontal gridlines, dashed vertical gridlines, framed plot area, weekday initials with full accessible day names, x-axis title Days, and rounded 16px bars in `#FFAB40`. Support touch/hover tooltips and zero-value weeks with axes intact.
+- Each chart container has explicit sizing and is rendered by a client component. Loading and empty states remain visible; do not use fabricated data.
+- Transaction date headings and row metadata use DD/MM/YYYY. Rows include icon, description, muted date/category, signed amount, neutral Completed chip, and visible delete action; activating the row edits it.
+- The compact summary money formatter uses en-IN grouping and omits `.00` for whole-rupee values.
+
+### Mobile field sizing and add flow
+
+- Inputs, selects, and textareas compute to at least 16px at touch/mobile widths, preventing iOS Safari focus zoom. Use `-webkit-text-size-adjust: 100%`; retain viewport `width=device-width, initial-scale=1, viewport-fit=cover`, without `maximum-scale` or `user-scalable=no`.
+- Floating Add transaction opens the shared dialog in place on Dashboard, Transaction History, Categories, and category detail. Opening, saving, canceling, and Escape do not change the URL. A successful save closes the dialog, updates existing query-backed views without a page reload, and shows a toast.
 
 ## Natural-language transaction entry
 
@@ -28,7 +51,7 @@ The smart-entry field debounces parsing by approximately 200ms and pauses during
 
 - Transaction delete controls are visible without hover at every viewport. Confirmation names the transaction, amount, and date and offers a destructive Delete action plus Cancel. Successful deletion retains the existing Undo toast.
 - Category removal uses a visible per-tile trash action named “Remove category: <name>” and a confirmation dialog.
-- Dialog positioning must not depend on ancestor transforms; native dialog top-layer placement and the shared modal styles define centering/docking.
+- Dialog positioning must not depend on ancestor transforms; native dialog top-layer placement and the shared modal styles define centering.
 
 ## Responsive quality targets
 

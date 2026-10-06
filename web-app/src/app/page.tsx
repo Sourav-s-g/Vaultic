@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CategoryCardStrip, DashboardTabs } from "@/components/finance-ui";
 import { RecentTransactions } from "@/components/transaction-list";
@@ -9,7 +9,7 @@ import { useCategories, useCurrentUserId, useTransactions } from "@/lib/data/hoo
 import { getCurrentMonthKey } from "@/lib/finance-summary";
 import type { TransactionRow } from "@/lib/data/finance";
 import { databaseAmountToPaise } from "@/lib/money";
-import { normalizeCategoryName } from "@/lib/categories/data";
+import { DATA_COLORS, normalizeCategoryName } from "@/lib/categories/data";
 
 function isTransactionDebit(row: TransactionRow): boolean {
   return row.type === "Debit" && !row.transaction_id.toLowerCase().startsWith("carry-forward-") && !row.description.toLowerCase().startsWith("balance carried forward");
@@ -48,7 +48,7 @@ export default function Home() {
   }));
 
   const unmatchedSpent = rows.filter((row) => isTransactionDebit(row) && row.date.slice(0, 7) === monthKey && !categoryMap.has(normalizeCategoryName(row.category?.trim() || "Other"))).reduce((sum, row) => sum + databaseAmountToPaise(Number(row.amount)), 0);
-  const cardItems = [...stripCategories, ...(unmatchedSpent > 0 ? [{ name: "Other", amountPaise: unmatchedSpent, href: "/categories/all-debit", color: "#9E9E9E" }] : [])];
+  const cardItems = [...stripCategories, ...(unmatchedSpent > 0 ? [{ name: "Other", amountPaise: unmatchedSpent, href: "/categories/all-debit", color: DATA_COLORS.custom }] : [])];
 
   if (user.isLoading || categories.isLoading || transactions.isLoading) {
     return <main className="workspace-page" aria-busy="true"><div className="skeleton skeleton-title" /><div className="skeleton skeleton-panel" /></main>;
@@ -68,9 +68,6 @@ export default function Home() {
 
   return (
     <main className="workspace-page">
-      <section className="feature-heading home-heading" aria-labelledby="home-heading">
-        <div><p className="eyebrow">PERSONAL FINANCE</p><h1 id="home-heading">Home</h1><p className="heading-copy">Your dashboard for spending, categories, and recent activity.</p></div>
-      </section>
       <CategoryCardStrip categories={cardItems} monthSpentPaise={monthSpent} />
       <DashboardTabs />
       <RecentTransactions />

@@ -18,7 +18,11 @@ These rules govern the Next.js application in `web-app/`. The Flutter applicatio
 - Use `@supabase/ssr` for cookie-aware browser/server clients. Use the public anon key only in public client configuration; never expose a service-role key.
 - Types derived from `docs/supabase/schema-snapshot.md` are authoritative only for SQL objects actually present there. If table definitions are absent, use explicitly marked provisional database types based on `docs/PARITY.md`; do not describe them as generated or verified.
 - Keep the foundation deployable from Vercel with project root `web-app/`; do not add a production domain to code or env defaults.
-- Mobile web follows the Flutter dashboard layout: header with title left and “Edit Categories” / “Logout” pill actions right; horizontally scrolling category cards; tab row; grouped transaction list; and a bottom-right floating add button. Do not render a mobile bottom tab bar.
+- Mobile web uses a Dashboard header with “Edit Categories” / “Logout” pill actions right, a horizontally scrolling category-card strip, an accessible tab row, grouped transaction list, and a bottom-right floating add button. Do not render a mobile bottom tab bar.
+- Desktop navigation is Dashboard, Transaction History, and Categories.
+- Every non-home page uses the shared sticky TopBar with a fixed back-to-Dashboard action and route-appropriate title; refresh is available on transaction history and category details.
+- All dialogs are centered horizontally and vertically at every viewport size. Do not use bottom sheets. Dialog bodies scroll internally, account for safe areas and the visual viewport, keep the page scroll-locked while open, and keep focused fields and primary actions reachable when the on-screen keyboard appears.
+- Inputs, selects, and textareas must render at a minimum 16px font size on touch/mobile widths to prevent iOS Safari focus zoom. Keep the viewport at `width=device-width, initial-scale=1, viewport-fit=cover`; never disable user zoom.
 - Desktop (>=1024px) retains the persistent sidebar and uses the extended layout defined in `docs/UI-SPEC.md`.
 
 ## 3. Design And Accessibility

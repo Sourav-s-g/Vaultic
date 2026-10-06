@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Landmark, LayoutDashboard, Moon, Plus, ReceiptText, Shapes, Sun } from "lucide-react";
+import { Landmark, LayoutDashboard, Moon, ReceiptText, Shapes, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { SessionControls } from "@/components/session-controls";
-import { AppHeader, FloatingAddButton } from "@/components/finance-ui";
+import { DashboardHeader, FloatingAddButton } from "@/components/finance-ui";
+import { TransactionForm } from "@/components/transaction-form";
+import { useCurrentUserId } from "@/lib/data/hooks";
 
 const subscribeToNothing = () => () => undefined;
 const getHydratedSnapshot = () => true;
@@ -32,6 +34,54 @@ function ThemeToggle() {
   );
 }
 
+type WorkspaceToast = {
+  message: string;
+  error?: boolean;
+  onUndo?: () => Promise<void> | void;
+};
+
+function WorkspaceComposer() {
+  const user = useCurrentUserId();
+  const [open, setOpen] = useState(false);
+  const [toast, setToast] = useState<WorkspaceToast | null>(null);
+
+  useEffect(() => {
+    const handleToast = (event: Event) => {
+      const detail = (event as CustomEvent<WorkspaceToast>).detail;
+      if (!detail) return;
+      setToast(detail);
+    };
+    window.addEventListener("vaultic:toast", handleToast as EventListener);
+    return () => window.removeEventListener("vaultic:toast", handleToast as EventListener);
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), toast.error ? 8000 : 5000);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  return (
+    <>
+      <FloatingAddButton onClick={() => setOpen(true)} />
+      {open && user.data && (
+        <TransactionForm
+          onClose={() => setOpen(false)}
+          onSaved={() => setToast({ message: "Transaction saved." })}
+          userId={user.data}
+        />
+      )}
+      {toast && (
+        <div aria-live="polite" className="toast-message workspace-toast" role="status">
+          <span>{toast.message}</span>
+          {toast.onUndo && <button disabled={toast.error} onClick={() => { void toast.onUndo?.(); }} type="button">Undo</button>}
+          <button aria-label="Dismiss notification" onClick={() => setToast(null)} type="button">Dismiss</button>
+        </div>
+      )}
+    </>
+  );
+}
+
 export function WorkspaceShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isHome = pathname === "/";
@@ -39,25 +89,24 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   const isTransactions = pathname.startsWith("/transactions");
   const isAuthRoute = ["/login", "/signup", "/forgot-password", "/reset-password"].includes(pathname);
   const isSetupPage = pathname === "/setup";
-  const currentPage = isCategories ? "Categories" : isTransactions ? "All transactions" : pathname === "/setup" ? "Setup" : "Home";
 
   if (isAuthRoute) return <div className="auth-frame">{children}</div>;
 
   return (
     <div className={`app-frame${isSetupPage ? " is-setup" : ""}`}>
       <aside aria-label="Primary navigation" className="desktop-rail">
-        <Link aria-label="Vaultic home" className="brand-lockup" href="/">
+        <Link aria-label="Vaultic Dashboard" className="brand-lockup" href="/">
           <span className="brand-symbol"><Landmark aria-hidden="true" size={18} /></span>
           <span className="brand-name">Vaultic</span>
         </Link>
         <p className="rail-caption">WORKSPACE</p>
         <Link aria-current={isHome ? "page" : undefined} className="rail-link" href="/">
           <LayoutDashboard aria-hidden="true" size={17} />
-          <span>Home</span>
+          <span>Dashboard</span>
         </Link>
         <Link aria-current={isTransactions ? "page" : undefined} className="rail-link" href="/transactions">
           <ReceiptText aria-hidden="true" size={17} />
-          <span>All transactions</span>
+          <span>Transaction History</span>
         </Link>
         <Link aria-current={isCategories ? "page" : undefined} className="rail-link" href="/categories">
           <Shapes aria-hidden="true" size={17} />
@@ -73,25 +122,11 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="main-column">
-        <header className="mobile-header">
-          <AppHeader />
-        </header>
-        <header className="topbar">
-          <div aria-label="Breadcrumb" className="breadcrumb">
-            <span>Workspace</span>
-            <span aria-hidden="true">/</span>
-            <span className="breadcrumb-current">{currentPage}</span>
-          </div>
-          <div className="topbar-actions">
-            <span className="topbar-meta"><span aria-hidden="true" className="status-dot" /> Personal workspace</span>
-            <Link className="button button-primary header-add-button" href="/transactions?new=1"><Plus aria-hidden="true" size={16} /> Add transaction</Link>
-            <SessionControls />
-          </div>
-        </header>
+        {isHome && <DashboardHeader />}
         {children}
       </div>
 
-      <FloatingAddButton />
+      <WorkspaceComposer />
     </div>
   );
 }

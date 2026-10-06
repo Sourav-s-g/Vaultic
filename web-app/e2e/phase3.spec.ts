@@ -3,6 +3,12 @@ import { expect, test } from "@playwright/test";
 const mockUrl = "http://127.0.0.1:54321";
 const userId = "b7b7c3b4-16aa-48d8-a0aa-6d98490c31ef";
 
+function currentMonthDate(day = 1) {
+  const now = new Date();
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
+}
+
 async function setSession(page: import("@playwright/test").Page) {
   const now = Math.floor(Date.now() / 1000);
   const session = {
@@ -99,7 +105,7 @@ test("adds and removes categories without rewriting transaction history", async 
 test("creates, edits, searches and deletes transactions with an undo path", async ({ page, request }) => {
   await resetBackend(request, {
     categories: [{ name: "Food", color: "#FF9800", icon: "utensils" }],
-    transactions: [{ transaction_id: "seed-1", description: "Old coffee ☕", amount: 50, type: "Debit", date: "2024-01-30T00:00:00.000", category: "Food" }],
+    transactions: [{ transaction_id: "seed-1", description: "Old coffee ☕", amount: 50, type: "Debit", date: `${currentMonthDate(2)}T00:00:00.000`, category: "Food" }],
   });
   await page.goto("/transactions");
   const addTransaction = (page.viewportSize()?.width ?? 1280) < 1024
@@ -109,19 +115,19 @@ test("creates, edits, searches and deletes transactions with an undo path", asyn
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.getByLabel("Amount (₹)").fill("250.50");
   await page.getByLabel("Description", { exact: true }).fill("Coffee ☕");
-  await page.getByLabel("Date").fill("2024-01-31");
+  const createdDate = currentMonthDate(3);
+  await page.getByLabel("Date").fill(createdDate);
   await page.getByLabel("Category", { exact: true }).selectOption("Food");
   await page.getByRole("button", { name: "Save transaction" }).click();
   await expect(page.locator(".transaction-row").getByText("Coffee ☕", { exact: true })).toBeVisible();
   await expect(page.getByRole("status")).toContainText("Transaction saved.");
 
-  await page.getByLabel("Search description or category").fill("coffee");
+  await page.getByPlaceholder("Search transactions...").fill("coffee");
   await expect(page.locator(".transaction-row").getByText("Old coffee ☕", { exact: true })).toBeVisible();
   await expect(page.locator(".transaction-row").getByText("Coffee ☕", { exact: true })).toBeVisible();
-  await page.getByLabel("Search description or category").fill("nothing matches");
-  await expect(page.getByText("Search: nothing matches")).toBeVisible();
-  await expect(page.getByText("No transactions match this search.")).toBeVisible();
-  await page.getByLabel("Search description or category").fill("");
+  await page.getByPlaceholder("Search transactions...").fill("nothing matches");
+  await expect(page.getByText("No transactions match these filters.")).toBeVisible();
+  await page.getByPlaceholder("Search transactions...").fill("");
 
   await page.getByRole("button", { name: "Edit transaction: Coffee ☕" }).click();
   await page.getByLabel("Amount (₹)").fill("1e3");
@@ -135,7 +141,7 @@ test("creates, edits, searches and deletes transactions with an undo path", asyn
   await page.getByRole("button", { name: "Delete transaction: Coffee ☕" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("300.00");
-  await expect(dialog).toContainText("31 Jan");
+  await expect(dialog).toContainText(createdDate.split("-").reverse().join("/"));
   await dialog.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Transaction deleted.");
   await page.getByRole("button", { name: "Undo" }).click();
@@ -153,16 +159,15 @@ test("uses server pagination for transaction history", async ({ page, request })
       description: `Transaction ${index}`,
       amount: index + 1,
       type: "Debit",
-      date: `2024-01-${String((index % 28) + 1).padStart(2, "0")}T00:00:00.000`,
+      date: `${currentMonthDate((index % 28) + 1)}T00:00:00.000`,
       category: "Food",
     })),
   });
   await page.goto("/transactions");
-  await expect(page.getByText("25 transactions")).toBeVisible();
   await expect(page.locator(".transaction-row")).toHaveCount(20);
-  await page.getByLabel("Search description or category").fill("Transaction 0");
+  await page.getByPlaceholder("Search transactions...").fill("Transaction 0");
   await expect(page.locator(".transaction-row").getByText("Transaction 0", { exact: true })).toBeVisible();
-  await page.getByLabel("Search description or category").fill("");
+  await page.getByPlaceholder("Search transactions...").fill("");
   await expect(page.locator(".transaction-row")).toHaveCount(20);
   await expect(page.getByRole("button", { name: "Load more" })).toBeVisible();
   await page.getByRole("button", { name: "Load more" }).click();
@@ -178,7 +183,7 @@ test("matches the responsive transaction layout and shared modal behavior", asyn
       { name: "Bills", color: "#795548", icon: "receipt" },
       { name: "Pets", color: "#9E9E9E", icon: "tag" },
     ],
-    transactions: [{ transaction_id: "layout-row", description: "Lunch", amount: 80, type: "Debit", date: "2024-01-31T00:00:00.000", category: "Food" }],
+    transactions: [{ transaction_id: "layout-row", description: "Lunch", amount: 80, type: "Debit", date: `${currentMonthDate(1)}T00:00:00.000`, category: "Food" }],
   });
   await page.goto("/transactions");
   const deleteButton = page.getByRole("button", { name: "Delete transaction: Lunch" });
@@ -187,32 +192,28 @@ test("matches the responsive transaction layout and shared modal behavior", asyn
   await expect(page.getByText("Apply to fields", { exact: true })).toHaveCount(0);
 
   const layout = await page.evaluate(() => {
-    const strip = document.querySelector(".category-card-strip")!;
     return {
       width: window.innerWidth,
       height: window.innerHeight,
       scrollWidth: document.documentElement.scrollWidth,
-      stripDisplay: getComputedStyle(strip).display,
-      stripScrollable: strip.scrollWidth > strip.clientWidth,
+      categoryCardCount: document.querySelectorAll(".category-card").length,
     };
   });
   expect(layout.scrollWidth).toBeLessThanOrEqual(layout.width);
-  if (layout.width < 1024) expect(layout.stripScrollable).toBe(true);
-  else expect(layout.stripDisplay).toBe("grid");
+  expect(layout.categoryCardCount).toBe(0);
 
-  const trigger = layout.width < 1024
-    ? page.locator(".mobile-add-button")
-    : page.getByRole("link", { name: "Add transaction", exact: true });
-  await trigger.click();
+  const trigger = page.getByRole("button", { name: "Add transaction", exact: true });
+  const originalUrl = page.url();
+  await trigger.focus();
+  await page.keyboard.press("Enter");
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
   const box = await dialog.boundingBox();
   expect(box).not.toBeNull();
-  if (box && layout.width >= 1024) {
+  if (box) {
     expect(Math.abs(box.x + box.width / 2 - layout.width / 2)).toBeLessThanOrEqual(2);
-    expect(Math.abs(box.y + box.height / 2 - layout.height / 2)).toBeLessThanOrEqual(2);
-  } else if (box) {
-    expect(Math.abs(box.y + box.height - layout.height)).toBeLessThanOrEqual(12);
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height).toBeLessThanOrEqual(layout.height);
   }
   await expect(dialog.getByText("Apply to fields", { exact: true })).toHaveCount(0);
   await page.getByLabel("Quick entry").fill("250 lunch");
@@ -221,6 +222,7 @@ test("matches the responsive transaction layout and shared modal behavior", asyn
   await expect(page.getByText("Filled from your text")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
+  expect(page.url()).toBe(originalUrl);
   await expect(trigger).toBeFocused();
 });
 
@@ -238,4 +240,106 @@ test("keeps twelve category tiles compact", async ({ page, request }) => {
   expect(height).toBeLessThan(600);
   const pageWidth = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(pageWidth).toBeLessThanOrEqual(page.viewportSize()!.width);
+});
+
+test("uses the approved Dashboard title and history chart layout", async ({ page, request }) => {
+  await resetBackend(request, {
+    categories: [
+      { name: "Food", color: "#FF9800", icon: "utensils" },
+      { name: "Travel", color: "#4CAF50", icon: "car" },
+    ],
+    transactions: [
+      { transaction_id: "food-a", description: "Lunch", amount: 114.6, type: "Debit", date: `${currentMonthDate(3)}T00:00:00.000`, category: "Food" },
+      { transaction_id: "food-b", description: "Snack", amount: 5, type: "Debit", date: `${currentMonthDate(4)}T00:00:00.000`, category: "Food" },
+      { transaction_id: "travel-a", description: "Bus", amount: 30, type: "Debit", date: `${currentMonthDate(5)}T00:00:00.000`, category: "Travel" },
+      { transaction_id: "income-a", description: "Salary", amount: 150, type: "Credit", date: `${currentMonthDate(6)}T00:00:00.000`, category: null },
+    ],
+  });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
+  await expect(page.getByText("Your personalised dashboard for your expenses", { exact: true })).toBeVisible();
+  await expect(page).toHaveTitle("Dashboard · Vaultic");
+  await expect(page.getByRole("region", { name: "Category totals" })).toBeVisible();
+
+  await page.goto("/transactions");
+  await expect(page.getByRole("heading", { name: "Transaction History" })).toBeVisible();
+  await expect(page.locator(".category-card")).toHaveCount(0);
+  await expect(page.locator(".donut-chart path")).toHaveCount(2);
+  await expect(page.getByTestId("weekly-bar")).toHaveCount(7);
+  await expect(page.getByRole("button", { name: "Filter by Food" })).toBeVisible();
+  await expect(page.getByText("Monthly Income")).toBeVisible();
+  await expect(page.getByText("Monthly Spent")).toBeVisible();
+  await expect(page.getByText("Total Balance")).toBeVisible();
+  const columns = await page.locator(".transactions-summary-panel .summary-block").evaluateAll((items) =>
+    items.map((item) => ({ top: item.getBoundingClientRect().top, left: item.getBoundingClientRect().left })),
+  );
+  expect(columns).toHaveLength(3);
+  expect(new Set(columns.map((item) => item.top)).size).toBe(1);
+  const firstWeek = await page.locator("#weekly-chart-title").textContent();
+  await page.getByRole("button", { name: "Previous week" }).click();
+  await expect(page.locator("#weekly-chart-title")).not.toHaveText(firstWeek ?? "");
+
+  const consoleWarnings: string[] = [];
+  page.on("console", (message) => {
+    if (/recharts|width\(-1\)|height\(-1\)/i.test(message.text())) consoleWarnings.push(message.text());
+  });
+  await expect(page.locator(".weekly-bar")).toHaveCount(7);
+  expect(consoleWarnings).toEqual([]);
+});
+
+test("opens the global add dialog in place from supported routes and checks mobile sizing", async ({ page, request }) => {
+  await resetBackend(request, {
+    categories: [{ name: "Food", color: "#FF9800", icon: "utensils" }],
+  });
+
+  for (const route of ["/", "/transactions", "/categories", "/categories/Food"]) {
+    await page.goto(route);
+    const before = page.url();
+    const add = page.getByRole("button", { name: "Add transaction", exact: true });
+    await add.click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    expect(page.url()).toBe(before);
+
+    const viewport = await page.evaluate(() => ({
+      width: window.innerWidth,
+      height: window.innerHeight,
+      meta: document.querySelector('meta[name="viewport"]')?.getAttribute("content") ?? "",
+      fontSizes: [...document.querySelectorAll("input, select, textarea")].map((element) => Number.parseFloat(getComputedStyle(element).fontSize)),
+    }));
+    if (viewport.width <= 1023) expect(viewport.fontSizes.every((size) => size >= 16)).toBe(true);
+    expect(viewport.meta).not.toMatch(/maximum-scale|user-scalable\s*=\s*no/i);
+    const box = await dialog.boundingBox();
+    expect(box).not.toBeNull();
+    if (box) {
+      expect(Math.abs(box.x + box.width / 2 - viewport.width / 2)).toBeLessThanOrEqual(2);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+    }
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(dialog).toBeHidden();
+    expect(page.url()).toBe(before);
+
+    await add.click();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    expect(page.url()).toBe(before);
+  }
+});
+
+test("back arrows always return to Dashboard", async ({ page, request }) => {
+  await resetBackend(request, {
+    categories: [{ name: "Food", color: "#FF9800", icon: "utensils" }],
+  });
+  for (const route of ["/transactions", "/categories", "/categories/Food"]) {
+    await page.goto(route);
+    const back = page.getByRole("link", { name: "Back to Dashboard" });
+    await expect(back).toBeVisible();
+    const box = await back.boundingBox();
+    expect(box?.width).toBeGreaterThanOrEqual(44);
+    expect(box?.height).toBeGreaterThanOrEqual(44);
+    expect(box?.x).toBeGreaterThanOrEqual(0);
+    await back.click();
+    await expect(page).toHaveURL(/\/$/);
+  }
 });

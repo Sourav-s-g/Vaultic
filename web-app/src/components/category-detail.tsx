@@ -6,6 +6,7 @@ import { useCategories, useCategoryBudget, useCurrentUserId, useDeleteCategoryBu
 import { TransactionForm } from "@/components/transaction-form";
 import { TransactionRow } from "@/components/transaction-list";
 import { Modal } from "@/components/modal";
+import { TopBar } from "@/components/finance-ui";
 import { normalizeCategoryName } from "@/lib/categories/data";
 import { databaseAmountToPaise, formatPaise, parseAmountToPaise } from "@/lib/money";
 import type { TransactionRow as TransactionRecord } from "@/lib/data/finance";
@@ -29,13 +30,13 @@ export function CategoryDetailPage({ category }: { category: string }) {
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [showAllTime, setShowAllTime] = useState(false);
   const [search, setSearch] = useState("");
-  const [budgetInput, setBudgetInput] = useState("");
+  const [budgetInput, setBudgetInput] = useState<string>();
   const [budgetError, setBudgetError] = useState("");
   const [editing, setEditing] = useState<TransactionRecord>();
   const [pendingRemoval, setPendingRemoval] = useState<TransactionRecord>();
   const [formOpen, setFormOpen] = useState(false);
 
-  const decodedCategory = decodeURIComponent(category);
+  const decodedCategory = category;
   const isAllDebit = decodedCategory === "all-debit";
   const matchedCategory = useMemo(() => {
     if (isAllDebit) return null;
@@ -43,8 +44,9 @@ export function CategoryDetailPage({ category }: { category: string }) {
   }, [categories.data, decodedCategory, isAllDebit]);
 
   const budget = useCategoryBudget(user.data, matchedCategory?.name ?? "");
-  const currentBudgetInput = budgetInput || (budget.data !== null && budget.data !== undefined ? String(budget.data / 100) : "");
+  const currentBudgetInput = budgetInput ?? (budget.data !== null && budget.data !== undefined ? String(budget.data / 100) : "");
   const transactions = useTransactions(user.data, search);
+  const topBar = <TopBar isFetching={transactions.isFetching} onRefresh={() => { void transactions.refetch(); }} title={isAllDebit ? "All debits" : matchedCategory?.name ?? decodedCategory} />;
   const saveBudget = useSaveCategoryBudget(user.data);
   const deleteBudget = useDeleteCategoryBudget(user.data);
 
@@ -70,7 +72,7 @@ export function CategoryDetailPage({ category }: { category: string }) {
     event.preventDefault();
     if (!matchedCategory) return;
     try {
-      const paise = parseAmountToPaise(budgetInput.trim());
+      const paise = parseAmountToPaise((budgetInput ?? currentBudgetInput).trim());
       await saveBudget.mutateAsync({ category: matchedCategory.name, amountPaise: paise });
       setBudgetError("");
     } catch (error) {
@@ -85,26 +87,19 @@ export function CategoryDetailPage({ category }: { category: string }) {
   }
 
   if (user.isLoading || categories.isLoading || transactions.isLoading) {
-    return <main className="feature-page" aria-busy="true"><div className="skeleton skeleton-title" /><div className="skeleton skeleton-panel" /></main>;
+    return <main className="feature-page">{topBar}<div aria-busy="true"><div className="skeleton skeleton-title" /><div className="skeleton skeleton-panel" /></div></main>;
   }
   if (user.error || categories.error || transactions.error) {
-    return <main className="feature-page"><section className="feature-panel" role="alert"><h1>Could not load this category</h1><p>{(user.error ?? categories.error ?? transactions.error)?.message}</p><button className="button button-primary" onClick={() => { void user.refetch(); void categories.refetch(); void transactions.refetch(); }} type="button">Try again</button></section></main>;
+    return <main className="feature-page">{topBar}<section className="feature-panel" role="alert"><h1>Could not load this category</h1><p>{(user.error ?? categories.error ?? transactions.error)?.message}</p><button className="button button-primary" onClick={() => { void user.refetch(); void categories.refetch(); void transactions.refetch(); }} type="button">Try again</button></section></main>;
   }
-  if (!user.data) return <main className="feature-page"><p role="status">Sign in to view category details.</p></main>;
+  if (!user.data) return <main className="feature-page">{topBar}<p role="status">Sign in to view category details.</p></main>;
   if (!isAllDebit && !matchedCategory) {
-    return <main className="feature-page"><section className="feature-panel"><h1>Category not found</h1><p>That category is no longer available for this account.</p><Link className="button button-primary" href="/">Back home</Link></section></main>;
+    return <main className="feature-page">{topBar}<section className="feature-panel"><h1>Category not found</h1><p>That category is no longer available for this account.</p><Link className="button button-primary" href="/">Back home</Link></section></main>;
   }
 
   return (
     <main className="feature-page category-detail-page">
-      <section className="feature-heading category-header">
-        <div>
-          <p className="eyebrow">CATEGORY</p>
-          <h1>{isAllDebit ? "All debits" : matchedCategory?.name ?? decodedCategory}</h1>
-          <p className="heading-copy">Track spending, budget usage, and history for this category.</p>
-        </div>
-        <Link className="button button-secondary" href="/">← Home</Link>
-      </section>
+      {topBar}
 
       <div className="category-toolbar">
         <label className="inline-field">
