@@ -157,6 +157,7 @@ These decisions were approved for Phase 1 and later implementation. Every fix or
 - Require confirmation before deleting a transaction.
 - When removing a category, delete only its category and matching budget rows scoped to the authenticated user; preserve every transaction's stored category text.
 - Compare a transaction's loaded `updated_at` on edit and show a conflict/reload path instead of silently overwriting a concurrent change.
+- Use Flutter-style mobile workspace navigation: header actions, horizontal category-card strip, tabs, grouped transactions, and floating add action; omit the web-only mobile bottom tab bar. Desktop retains the persistent sidebar.
 - Default “This Month Spent” and category totals to the current month, with an All time switch.
 - Cap OWO partial payment/receipt at the remaining amount; warn when reopening a settled entry because its settlement transaction remains.
 - Make PDF end dates inclusive through end-of-day and calculate opening balance from all transactions before the selected range.

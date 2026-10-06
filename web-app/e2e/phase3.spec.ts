@@ -68,19 +68,22 @@ test("adds and removes categories without rewriting transaction history", async 
     transactions: [{ transaction_id: "history-1", description: "Lunch", amount: 120, type: "Debit", date: "2024-01-31T00:00:00.000", category: "Food" }],
   });
   await page.goto("/categories");
+  await page.getByRole("button", { name: "Add custom" }).click();
   await page.getByLabel("Category name").fill("Pets");
   await page.getByRole("button", { name: "Add category" }).click();
-  await expect(page.locator(".inline-error")).toHaveText("A category with this name already exists.");
+  await expect(page.getByRole("dialog").getByRole("alert")).toHaveText("A category with this name already exists.");
   await expect(page.getByLabel("Category name")).toHaveValue("Pets");
 
   await page.getByRole("button", { name: "Add category" }).click();
   await expect(page.getByRole("status")).toContainText("Pets added.");
 
+  await page.getByRole("button", { name: "Add custom" }).click();
   await page.getByLabel("Category name").fill(" pets ");
   await page.getByRole("button", { name: "Add category" }).click();
   await expect(page.locator(".inline-error")).toContainText("already exists");
+  await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
 
-  await page.getByRole("button", { name: "Remove fOoD" }).click();
+  await page.getByRole("button", { name: "Remove category: fOoD" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Transactions keep their existing category text");
   await dialog.getByRole("button", { name: "Remove category" }).click();
@@ -120,7 +123,7 @@ test("creates, edits, searches and deletes transactions with an undo path", asyn
   await expect(page.getByText("No transactions match this search.")).toBeVisible();
   await page.getByLabel("Search description or category").fill("");
 
-  await page.getByRole("button", { name: "Edit Coffee ☕" }).click();
+  await page.getByRole("button", { name: "Edit transaction: Coffee ☕" }).click();
   await page.getByLabel("Amount (₹)").fill("1e3");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.locator(".inline-error")).toContainText("greater than zero");
@@ -129,9 +132,11 @@ test("creates, edits, searches and deletes transactions with an undo path", asyn
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByRole("status")).toContainText("Transaction updated.");
 
-  await page.getByRole("button", { name: "Delete Coffee ☕" }).click();
+  await page.getByRole("button", { name: "Delete transaction: Coffee ☕" }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "Delete transaction" }).click();
+  await expect(dialog).toContainText("300.00");
+  await expect(dialog).toContainText("31 Jan");
+  await dialog.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Transaction deleted.");
   await page.getByRole("button", { name: "Undo" }).click();
   await expect(page.getByRole("status")).toContainText("Transaction restored.");
@@ -163,4 +168,74 @@ test("uses server pagination for transaction history", async ({ page, request })
   await page.getByRole("button", { name: "Load more" }).click();
   await expect(page.getByText("Transaction 0", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
+});
+
+test("matches the responsive transaction layout and shared modal behavior", async ({ page, request }) => {
+  await resetBackend(request, {
+    categories: [
+      { name: "Food", color: "#FF9800", icon: "utensils" },
+      { name: "Transport", color: "#00BCD4", icon: "bus" },
+      { name: "Bills", color: "#795548", icon: "receipt" },
+      { name: "Pets", color: "#9E9E9E", icon: "tag" },
+    ],
+    transactions: [{ transaction_id: "layout-row", description: "Lunch", amount: 80, type: "Debit", date: "2024-01-31T00:00:00.000", category: "Food" }],
+  });
+  await page.goto("/transactions");
+  const deleteButton = page.getByRole("button", { name: "Delete transaction: Lunch" });
+  await expect(deleteButton).toBeVisible();
+  await expect(deleteButton).toHaveCSS("opacity", "1");
+  await expect(page.getByText("Apply to fields", { exact: true })).toHaveCount(0);
+
+  const layout = await page.evaluate(() => {
+    const strip = document.querySelector(".category-card-strip")!;
+    return {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      scrollWidth: document.documentElement.scrollWidth,
+      stripDisplay: getComputedStyle(strip).display,
+      stripScrollable: strip.scrollWidth > strip.clientWidth,
+    };
+  });
+  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.width);
+  if (layout.width < 1024) expect(layout.stripScrollable).toBe(true);
+  else expect(layout.stripDisplay).toBe("grid");
+
+  const trigger = layout.width < 1024
+    ? page.locator(".mobile-add-button")
+    : page.getByRole("link", { name: "Add transaction", exact: true });
+  await trigger.click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  const box = await dialog.boundingBox();
+  expect(box).not.toBeNull();
+  if (box && layout.width >= 1024) {
+    expect(Math.abs(box.x + box.width / 2 - layout.width / 2)).toBeLessThanOrEqual(2);
+    expect(Math.abs(box.y + box.height / 2 - layout.height / 2)).toBeLessThanOrEqual(2);
+  } else if (box) {
+    expect(Math.abs(box.y + box.height - layout.height)).toBeLessThanOrEqual(12);
+  }
+  await expect(dialog.getByText("Apply to fields", { exact: true })).toHaveCount(0);
+  await page.getByLabel("Quick entry").fill("250 lunch");
+  await expect(page.getByLabel("Amount (₹)")).toHaveValue("250");
+  await expect(page.getByLabel("Description", { exact: true })).toHaveValue("Lunch");
+  await expect(page.getByText("Filled from your text")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(trigger).toBeFocused();
+});
+
+test("keeps twelve category tiles compact", async ({ page, request }) => {
+  await resetBackend(request, {
+    categories: Array.from({ length: 12 }, (_, index) => ({
+      name: `Category ${index + 1}`,
+      color: "#9E9E9E",
+      icon: "tag",
+    })),
+  });
+  await page.goto("/categories");
+  await expect(page.locator(".category-tile")).toHaveCount(12);
+  const height = await page.locator(".category-panel").evaluate((element) => element.getBoundingClientRect().height);
+  expect(height).toBeLessThan(600);
+  const pageWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(pageWidth).toBeLessThanOrEqual(page.viewportSize()!.width);
 });

@@ -1,4 +1,5 @@
 export const DATA_COLORS = {
+  expense: "#F44336",
   custom: "#9E9E9E",
   suggested: {
     Food: "#FF9800",

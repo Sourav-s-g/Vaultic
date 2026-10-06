@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Plus, Search, Trash2 } from "lucide-react";
 import { formatPaise, databaseAmountToPaise } from "@/lib/money";
 import { transactionDateInputValue, parseDateInput } from "@/lib/dates";
-import { useCurrentUserId, useDeleteTransaction, useTransactions, useUndoDeleteTransaction } from "@/lib/data/hooks";
-import type { TransactionRow } from "@/lib/data/finance";
+import { useCategories, useCurrentUserId, useDeleteTransaction, useTransactions, useUndoDeleteTransaction } from "@/lib/data/hooks";
+import type { TransactionRow as TransactionRecord } from "@/lib/data/finance";
 import { TransactionForm } from "@/components/transaction-form";
+import { Modal } from "@/components/modal";
+import { CategoryCardStrip, DashboardTabs } from "@/components/finance-ui";
 
 function dateHeading(value: string): string {
   const { year, month, day } = parseDateInput(value);
@@ -24,36 +26,57 @@ function displayAmount(amount: number): string {
   }
 }
 
+function displayDate(value: string): string {
+  const date = transactionDateInputValue(value);
+  const [year, month, day] = date.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short" }).format(new Date(year, month - 1, day, 12));
+}
+
 export function TransactionRows({
   rows,
   onEdit,
   onDelete,
 }: {
-  rows: TransactionRow[];
-  onEdit?: (row: TransactionRow) => void;
-  onDelete?: (row: TransactionRow) => void;
+  rows: TransactionRecord[];
+  onEdit?: (row: TransactionRecord) => void;
+  onDelete?: (row: TransactionRecord) => void;
 }) {
   return (
     <div className="transaction-group">
-      {rows.map((row) => {
-        const category = row.category?.trim();
-        return (
-          <article className="transaction-row" key={row.transaction_id}>
-            <div className="transaction-description">
-              <strong>{row.description}</strong>
-              <span className="transaction-subtitle">{row.type === "Debit" ? category || "Uncategorized" : "Income"}{row.status ? ` · ${row.status}` : ""}</span>
-            </div>
-            <span className="transaction-amount">{row.type === "Credit" ? "+" : "−"}{displayAmount(row.amount)}</span>
-            {(onEdit || onDelete) && (
-              <div className="transaction-actions">
-                {onEdit && <button aria-label={`Edit ${row.description}`} className="icon-button" onClick={() => onEdit(row)} type="button"><Pencil aria-hidden="true" size={17} /></button>}
-                {onDelete && <button aria-label={`Delete ${row.description}`} className="icon-button" onClick={() => onDelete(row)} type="button"><Trash2 aria-hidden="true" size={17} /></button>}
-              </div>
-            )}
-          </article>
-        );
-      })}
+      {rows.map((row) => <TransactionRow key={row.transaction_id} onDelete={onDelete} onEdit={onEdit} row={row} />)}
     </div>
+  );
+}
+
+export function TransactionRow({
+  row,
+  onEdit,
+  onDelete,
+}: {
+  row: TransactionRecord;
+  onEdit?: (row: TransactionRecord) => void;
+  onDelete?: (row: TransactionRecord) => void;
+}) {
+  const category = row.category?.trim();
+  return (
+    <article
+      aria-label={onEdit ? `Edit transaction: ${row.description}` : undefined}
+      className="transaction-row"
+      onClick={() => onEdit?.(row)}
+      onKeyDown={(event) => { if (onEdit && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onEdit(row); } }}
+      role={onEdit ? "button" : undefined}
+      tabIndex={onEdit ? 0 : undefined}
+    >
+      <span aria-hidden="true" className={`transaction-icon-tile${row.type === "Credit" ? " is-credit" : ""}`}>
+        {row.type === "Credit" ? <ArrowDownLeft size={19} /> : <ArrowUpRight size={19} />}
+      </span>
+      <div className="transaction-description">
+        <strong>{row.description}</strong>
+        <span className="transaction-subtitle">{displayDate(row.date)} · {category || "Uncategorized"} · {row.type === "Credit" ? "Cr" : "Dr"}</span>
+      </div>
+      <span className={`transaction-amount${row.type === "Credit" ? " is-credit" : " is-debit"}`}>{row.type === "Credit" ? "+" : "-"}{displayAmount(row.amount)}</span>
+      {onDelete && <button aria-label={`Delete transaction: ${row.description}`} className="transaction-delete" onClick={(event) => { event.stopPropagation(); onDelete(row); }} title={`Delete transaction: ${row.description}`} type="button"><Trash2 aria-hidden="true" size={18} /></button>}
+    </article>
   );
 }
 
@@ -81,12 +104,13 @@ export function RecentTransactions() {
 export function TransactionsPage({ startOpen = false }: { startOpen?: boolean }) {
   const router = useRouter();
   const user = useCurrentUserId();
+  const categories = useCategories(user.data);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [formOpen, setFormOpen] = useState(startOpen);
-  const [editing, setEditing] = useState<TransactionRow>();
-  const [pendingRemoval, setPendingRemoval] = useState<TransactionRow>();
-  const [toast, setToast] = useState<{ message: string; row?: TransactionRow; error?: boolean }>();
+  const [editing, setEditing] = useState<TransactionRecord>();
+  const [pendingRemoval, setPendingRemoval] = useState<TransactionRecord>();
+  const [toast, setToast] = useState<{ message: string; row?: TransactionRecord; error?: boolean }>();
   const transactions = useTransactions(user.data, debouncedSearch);
   const remove = useDeleteTransaction(user.data);
   const undo = useUndoDeleteTransaction(user.data);
@@ -98,7 +122,7 @@ export function TransactionsPage({ startOpen = false }: { startOpen?: boolean })
 
   const allRows = useMemo(() => transactions.data?.pages.flatMap((page) => page.items) ?? [], [transactions.data]);
   const groupedRows = useMemo(() => {
-    const groups = new Map<string, TransactionRow[]>();
+    const groups = new Map<string, TransactionRecord[]>();
     for (const row of allRows) {
       const date = transactionDateInputValue(row.date);
       groups.set(date, [...(groups.get(date) ?? []), row]);
@@ -106,7 +130,7 @@ export function TransactionsPage({ startOpen = false }: { startOpen?: boolean })
     return [...groups.entries()].sort(([left], [right]) => right.localeCompare(left));
   }, [allRows]);
 
-  function startEditing(row: TransactionRow) {
+  function startEditing(row: TransactionRecord) {
     setToast(undefined);
     setEditing(row);
     setFormOpen(true);
@@ -149,6 +173,11 @@ export function TransactionsPage({ startOpen = false }: { startOpen?: boolean })
         <div><p className="eyebrow">LEDGER</p><h1>Transactions</h1><p className="heading-copy">Search and manage your transaction history.</p></div>
         <button className="button button-primary header-add-button" onClick={() => { setEditing(undefined); setFormOpen(true); }} type="button"><Plus aria-hidden="true" size={16} /> Add transaction</button>
       </section>
+      <CategoryCardStrip categories={(categories.data ?? []).map((category) => ({
+        name: category.name,
+        amountPaise: null,
+      }))} />
+      <DashboardTabs />
       <div className="transactions-toolbar">
         <label className="sr-only" htmlFor="transaction-search">Search description or category</label>
         <div className="search-input-wrap"><Search aria-hidden="true" size={17} /><input autoComplete="off" className="text-input" id="transaction-search" onChange={(event) => setSearch(event.target.value)} placeholder="Search description or category" value={search} /></div>
@@ -172,18 +201,17 @@ export function TransactionsPage({ startOpen = false }: { startOpen?: boolean })
           <button aria-label="Dismiss notification" onClick={() => setToast(undefined)} type="button">Dismiss</button>
         </div>
       )}
-      {pendingRemoval && (
-        <div aria-labelledby="delete-transaction-title" aria-modal="true" className="confirm-backdrop" role="dialog">
-          <section className="confirm-dialog">
+      <Modal className="confirm-dialog" onClose={() => setPendingRemoval(undefined)} open={Boolean(pendingRemoval)} titleId="delete-transaction-title">
+          <section className="modal-content">
             <h2 id="delete-transaction-title">Delete transaction?</h2>
-            <p>“{pendingRemoval.description}” will be deleted. This cannot be undone after the undo notice expires.</p>
+            {pendingRemoval && <p className="delete-transaction-details"><strong>{pendingRemoval.description}</strong><span>{displayAmount(pendingRemoval.amount)} · {displayDate(pendingRemoval.date)}</span></p>}
+            <p>This transaction will be deleted. You can undo this action from the notice for a short time.</p>
             <div className="wizard-actions">
               <button className="button button-secondary" onClick={() => setPendingRemoval(undefined)} type="button">Cancel</button>
-              <button className="button button-primary" disabled={remove.isPending} onClick={() => void confirmDelete()} type="button">{remove.isPending ? "Deleting…" : "Delete transaction"}</button>
+              <button className="button button-danger" disabled={remove.isPending} onClick={() => void confirmDelete()} type="button">{remove.isPending ? "Deleting…" : "Delete"}</button>
             </div>
           </section>
-        </div>
-      )}
+      </Modal>
       {formOpen && user.data && (
         <TransactionForm
           key={editing?.transaction_id ?? "new"}

@@ -1,12 +1,14 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Modal } from "@/components/modal";
 import { isTransactionDateAllowed, todayDateInput, transactionDateInputValue, serializeFlutterLocalDateTime } from "@/lib/dates";
 import { useCategories, useCreateTransaction, useUpdateTransaction } from "@/lib/data/hooks";
 import { CategoryUnavailableError, type TransactionRow } from "@/lib/data/finance";
-import { databaseAmountToPaise, formatPaise, parseAmountToPaise, paiseToDatabaseAmount } from "@/lib/money";
-import { parseTransactionInput, type ParsedTransaction } from "@/lib/parser";
+import { databaseAmountToPaise, parseAmountToPaise, paiseToDatabaseAmount } from "@/lib/money";
+import { parseTransactionInput } from "@/lib/parser";
+import { applyParsedFields, clearAutoFilledFields, type SmartFieldName, type SmartFields } from "@/lib/parser/auto-fill";
 import { transactionInputSchema } from "@/lib/schemas";
 
 function amountInputFromPaise(paise: number): string {
@@ -25,15 +27,17 @@ export function TransactionForm({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const dialog = useRef<HTMLDialogElement>(null);
   const submitting = useRef(false);
+  const touched = useRef(new Set<SmartFieldName>());
+  const autoFilled = useRef(new Set<SmartFieldName>());
+  const [autoFilledFields, setAutoFilledFields] = useState<Set<SmartFieldName>>(new Set());
+  const [composing, setComposing] = useState(false);
   const categories = useCategories(userId);
   const create = useCreateTransaction(userId);
   const update = useUpdateTransaction(userId);
   const pending = create.isPending || update.isPending;
   const today = todayDateInput();
   const [naturalInput, setNaturalInput] = useState("");
-  const [preview, setPreview] = useState<ParsedTransaction | null>(null);
   const [amount, setAmount] = useState(() => {
     if (!transaction) return "";
     try {
@@ -49,16 +53,16 @@ export function TransactionForm({
   const [type, setType] = useState<"Credit" | "Debit">(transaction?.type ?? "Debit");
   const [selectedCategory, setCategory] = useState(transaction?.category ?? "");
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    const element = dialog.current;
-    if (element && !element.open) element.showModal();
-    return () => {
-      if (element?.open) element.close();
-    };
-  }, []);
+  const fieldsRef = useRef<SmartFields>({
+    amount,
+    description,
+    date,
+    type,
+    category: selectedCategory,
+  });
 
   const categoryRows = categories.data ?? [];
+  const categoryNames = useMemo(() => categories.data?.map((item) => item.name) ?? [], [categories.data]);
   const createAllowed = type === "Credit" || categoryRows.some((item) => item.name === selectedCategory);
   const minimum = "2020-01-01";
   const maximum = (() => {
@@ -68,23 +72,55 @@ export function TransactionForm({
     return `${targetYear}-${String(parts[1]).padStart(2, "0")}-${String(Math.min(parts[2], lastDay)).padStart(2, "0")}`;
   })();
 
-  function updateNaturalInput(value: string) {
-    setNaturalInput(value);
-    setPreview(parseTransactionInput(value, categoryRows.map((item) => item.name), today));
+  function commitSmartFields(fields: SmartFields, marked: Set<SmartFieldName>) {
+    fieldsRef.current = fields;
+    setAmount(fields.amount);
+    setDescription(fields.description);
+    setDate(fields.date);
+    setType(fields.type);
+    setCategory(fields.category);
+    autoFilled.current = marked;
+    setAutoFilledFields(new Set(marked));
   }
 
-  function applyPreview() {
-    if (!preview) return;
-    if (preview.amount !== null) setAmount(preview.amount);
-    if (preview.description !== "Transaction") setDescription(preview.description);
-    setType(preview.type);
-    if (preview.type === "Credit") {
-      setCategory("");
-    } else {
-      const match = categoryRows.find((item) => item.name === preview.category);
-      setCategory(match?.name ?? categoryRows[0]?.name ?? "");
+  function updateSmartInput(value: string) {
+    setNaturalInput(value);
+    if (!value.trim()) {
+      const result = clearAutoFilledFields(fieldsRef.current, touched.current, autoFilled.current, today);
+      commitSmartFields(result.fields, result.autoFilled);
     }
-    setDate(preview.date);
+  }
+
+  useEffect(() => {
+    if (composing || !naturalInput.trim()) return;
+    const timer = window.setTimeout(() => {
+      const parsed = parseTransactionInput(naturalInput, categoryNames, today);
+      const result = applyParsedFields(fieldsRef.current, touched.current, autoFilled.current, parsed, categoryNames, today);
+      commitSmartFields(result.fields, result.autoFilled);
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [naturalInput, composing, categoryNames, today]);
+
+  function markTouched(field: SmartFieldName) {
+    touched.current.add(field);
+    autoFilled.current.delete(field);
+    setAutoFilledFields(new Set(autoFilled.current));
+  }
+
+  function updateManualField(field: Exclude<SmartFieldName, "type">, value: string) {
+    markTouched(field);
+    const next = { ...fieldsRef.current, [field]: value };
+    fieldsRef.current = next;
+    if (field === "amount") setAmount(value);
+    else if (field === "description") setDescription(value);
+    else if (field === "date") setDate(value);
+    else setCategory(value);
+  }
+
+  function updateType(value: SmartFields["type"]) {
+    markTouched("type");
+    fieldsRef.current = { ...fieldsRef.current, type: value };
+    setType(value);
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -148,25 +184,8 @@ export function TransactionForm({
     }
   }
 
-  const amountPaisePreview = (() => {
-    try {
-      const [rupees, paise = ""] = (preview?.amount ?? "").split(".");
-      if (!rupees) return null;
-      const value = Number(BigInt(rupees) * BigInt(100) + BigInt(paise.padEnd(2, "0") || "0"));
-      return Number.isSafeInteger(value) ? formatPaise(value) : null;
-    } catch {
-      return null;
-    }
-  })();
-
   return (
-    <dialog
-      aria-labelledby="transaction-form-title"
-      className="transaction-dialog"
-      onCancel={(event) => { event.preventDefault(); if (!pending) onClose(); }}
-      onClick={(event) => { if (event.target === event.currentTarget && !pending) onClose(); }}
-      ref={dialog}
-    >
+    <Modal className="transaction-dialog" closeDisabled={pending} onClose={onClose} open titleId="transaction-form-title">
       <form onSubmit={(event) => void submit(event)}>
         <header className="transaction-dialog-header">
           <h2 id="transaction-form-title">{transaction ? "Edit transaction" : "Add transaction"}</h2>
@@ -175,15 +194,9 @@ export function TransactionForm({
         <div className="transaction-dialog-body">
           <div className="transaction-field">
             <label htmlFor="natural-entry">Quick entry</label>
-            <input autoComplete="off" className="form-input" id="natural-entry" onChange={(event) => updateNaturalInput(event.target.value)} placeholder="e.g. Paid ₹250.50 for lunch" value={naturalInput} />
+            <input autoComplete="off" className="form-input" id="natural-entry" onChange={(event) => updateSmartInput(event.target.value)} onCompositionEnd={(event) => { setComposing(false); updateSmartInput(event.currentTarget.value); }} onCompositionStart={() => setComposing(true)} placeholder="e.g. Paid ₹250.50 for lunch" value={naturalInput} />
           </div>
-          {preview && naturalInput.trim() && (
-            <section aria-live="polite" className="parser-preview">
-              <p><strong>Preview:</strong> {amountPaisePreview ?? "Amount not detected"} · {preview.type} · {preview.category ?? "No category"} · {preview.date} · {Math.round(preview.confidence * 100)}% confidence</p>
-              {preview.suggestions.length > 0 && <p>Category suggestions: {preview.suggestions.join(", ")}</p>}
-              <button className="button button-secondary" onClick={applyPreview} type="button">Apply to fields</button>
-            </section>
-          )}
+          {autoFilledFields.size > 0 && <p aria-live="polite" className="auto-filled-note">Filled from your text</p>}
           <div className="transaction-fields-grid">
             <div className="transaction-field">
               <label htmlFor="transaction-amount">Amount (₹)</label>
@@ -193,7 +206,7 @@ export function TransactionForm({
                 className="form-input"
                 inputMode="decimal"
                 id="transaction-amount"
-                onChange={(event) => setAmount(event.target.value)}
+                onChange={(event) => updateManualField("amount", event.target.value)}
                 placeholder="0.00"
                 value={amount}
               />
@@ -202,9 +215,9 @@ export function TransactionForm({
               <label htmlFor="transaction-type">Type</label>
               <select className="form-select" id="transaction-type" onChange={(event) => {
                 const nextType = event.target.value as "Credit" | "Debit";
-                setType(nextType);
-                if (nextType === "Credit") setCategory("");
-                else setCategory((current) => current || categoryRows[0]?.name || "");
+                updateType(nextType);
+                if (nextType === "Credit") updateManualField("category", "");
+                else if (!selectedCategory) updateManualField("category", categoryRows[0]?.name ?? "");
               }} value={type}>
                 <option value="Debit">Debit</option><option value="Credit">Credit</option>
               </select>
@@ -213,12 +226,12 @@ export function TransactionForm({
           <div className="transaction-fields-grid">
             <div className="transaction-field">
               <label htmlFor="transaction-date">Date</label>
-              <input className="form-input" id="transaction-date" max={maximum} min={minimum} onChange={(event) => setDate(event.target.value)} required type="date" value={date} />
+              <input className="form-input" id="transaction-date" max={maximum} min={minimum} onChange={(event) => updateManualField("date", event.target.value)} required type="date" value={date} />
             </div>
             {type === "Debit" && (
               <div className="transaction-field">
                 <label htmlFor="transaction-category">Category</label>
-                <select className="form-select" id="transaction-category" onChange={(event) => setCategory(event.target.value)} required value={selectedCategory}>
+                <select className="form-select" id="transaction-category" onChange={(event) => updateManualField("category", event.target.value)} required value={selectedCategory}>
                   <option disabled value="">Choose a category</option>
                   {categoryRows.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
                 </select>
@@ -228,7 +241,7 @@ export function TransactionForm({
           </div>
           <div className="transaction-field">
             <label htmlFor="transaction-description">Description</label>
-            <textarea className="form-textarea" id="transaction-description" onChange={(event) => setDescription(event.target.value)} placeholder="Manual Entry" value={description} />
+            <textarea className="form-textarea" id="transaction-description" onChange={(event) => updateManualField("description", event.target.value)} placeholder="Manual Entry" value={description} />
           </div>
           {error && <p className="inline-error" id="transaction-error" role="alert">{error}</p>}
         </div>
@@ -239,6 +252,6 @@ export function TransactionForm({
           </button>
         </footer>
       </form>
-    </dialog>
+    </Modal>
   );
 }

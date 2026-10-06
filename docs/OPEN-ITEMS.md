@@ -35,6 +35,8 @@ The authoritative snapshot is [`docs/supabase/schema-snapshot.md`](./supabase/sc
 - Category removal calls `public.delete_category` once with the exact stored category name as `p_category_name`, so category and matching-budget deletion run atomically inside the database function.
 - Cross-tab edit conflicts are guarded by `(user_id, transaction_id, updated_at)` and stale categories are rechecked before save, but the race paths are not exercised by browser tests.
 - The 360px browser viewport covers responsive interactions, not a real mobile virtual keyboard or safe-area behavior on a physical iOS/Android device.
+- The Phase 3.5 category-card strip is presentational on `/transactions`; amounts are shown as a dash until Phase 4 adds the approved summary data. Validate keyboard visibility and safe-area insets on real iOS/Android devices before release.
+- The current web `parseTransactionInput` result defaults to today and does not detect a date written in natural-language input. Phase 3.5 auto-fill preserves an existing form date unless the parser returns a non-default date; date extraction must be added and tested in a future parser/data-behavior phase.
 
 ## Flutter Category Name Comparisons
 

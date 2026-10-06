@@ -12,12 +12,20 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "desktop",
-      use: { viewport: { width: 1280, height: 900 } },
+      name: "desktop-1440",
+      use: { viewport: { width: 1440, height: 900 } },
     },
     {
       name: "mobile-360",
-      use: { viewport: { width: 360, height: 800 }, isMobile: true, hasTouch: true },
+      use: { viewport: { width: 360, height: 740 }, isMobile: true, hasTouch: true },
+    },
+    {
+      name: "mobile-390",
+      use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
+    },
+    {
+      name: "tablet-768",
+      use: { viewport: { width: 768, height: 1024 }, isMobile: true, hasTouch: true },
     },
   ],
   webServer: [

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { createCategoryDraft, duplicateCategory, INITIAL_CATEGORIES, SUGGESTED_CATEGORIES, type CategoryDraft } from "@/lib/categories/data";
 import { safeNextPath } from "@/lib/auth/safe-next-path";
 import { useCategories, useCurrentUserId, useSaveSetupCategories } from "@/lib/data/hooks";
+import { CategoryTiles } from "@/components/finance-ui";
 
 export function CategorySetup({ nextPath }: { nextPath: string | null }) {
   const router = useRouter();
@@ -95,13 +96,13 @@ export function CategorySetup({ nextPath }: { nextPath: string | null }) {
         <section className="feature-panel" aria-labelledby="setup-category-title">
           <h2 id="setup-category-title">Choose categories</h2>
           <p className="muted-copy">Suggested categories start with five selected. Select any others you need.</p>
-          <div className="category-grid">
+          <div className="category-chips">
             {SUGGESTED_CATEGORIES.map((category) => {
               const active = duplicateCategory(selected, category.name);
               return (
                 <button
                   aria-pressed={active}
-                  className={`category-choice${active ? " is-selected" : ""}`}
+                  className={`category-chip${active ? " is-selected" : ""}`}
                   key={category.name}
                   onClick={() => toggleSuggested(category)}
                   type="button"
@@ -118,14 +119,10 @@ export function CategorySetup({ nextPath }: { nextPath: string | null }) {
             <button className="button button-secondary" type="submit">Add custom</button>
           </form>
           {selected.some((category) => !SUGGESTED_CATEGORIES.some((suggested) => suggested.name === category.name)) && (
-            <ul className="selected-custom-list" aria-label="Custom categories">
-              {selected.filter((category) => !SUGGESTED_CATEGORIES.some((suggested) => suggested.name === category.name)).map((category) => (
-                <li key={category.name}>
-                  <span><span className="category-swatch" style={{ backgroundColor: category.color }} />{category.name}</span>
-                  <button aria-label={`Remove ${category.name}`} className="text-button" onClick={() => setSelected((current) => current.filter((item) => item !== category))} type="button">Remove</button>
-                </li>
-              ))}
-            </ul>
+            <CategoryTiles
+              categories={selected.filter((category) => !SUGGESTED_CATEGORIES.some((suggested) => suggested.name === category.name))}
+              onRemove={(name) => setSelected((current) => current.filter((item) => item.name !== name))}
+            />
           )}
         </section>
       )}
@@ -134,9 +131,7 @@ export function CategorySetup({ nextPath }: { nextPath: string | null }) {
           <h2 id="setup-review-title">Review your categories</h2>
           <p className="muted-copy">{selected.length} selected. You can manage these any time.</p>
           {selected.length === 0 ? <p className="empty-state">No categories selected yet.</p> : (
-            <ul className="category-list">
-              {selected.map((category) => <li key={category.name}><span><span className="category-swatch" style={{ backgroundColor: category.color }} />{category.name}</span><span className="muted-copy">{category.icon}</span></li>)}
-            </ul>
+            <CategoryTiles categories={selected} onRemove={(name) => setSelected((current) => current.filter((item) => item.name !== name))} />
           )}
         </section>
       )}

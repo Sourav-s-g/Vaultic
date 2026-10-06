@@ -6,6 +6,7 @@ import { Landmark, LayoutDashboard, Moon, Plus, ReceiptText, Shapes, Sun } from 
 import { useTheme } from "next-themes";
 import { useSyncExternalStore, type ReactNode } from "react";
 import { SessionControls } from "@/components/session-controls";
+import { AppHeader, FloatingAddButton } from "@/components/finance-ui";
 
 const subscribeToNothing = () => () => undefined;
 const getHydratedSnapshot = () => true;
@@ -73,11 +74,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
 
       <div className="main-column">
         <header className="mobile-header">
-          <Link aria-label="Vaultic home" className="brand-lockup" href="/">
-            <span className="brand-symbol"><Landmark aria-hidden="true" size={17} /></span>
-            <span className="brand-name">Vaultic</span>
-          </Link>
-          <div className="mobile-session-actions"><SessionControls /><ThemeToggle /></div>
+          <AppHeader />
         </header>
         <header className="topbar">
           <div aria-label="Breadcrumb" className="breadcrumb">
@@ -94,21 +91,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         {children}
       </div>
 
-      <nav aria-label="Mobile navigation" className="mobile-tabs">
-        <Link aria-current={isOverview ? "page" : undefined} className="mobile-tab" href="/">
-          <LayoutDashboard aria-hidden="true" size={17} />
-          <span>Overview</span>
-        </Link>
-        <Link aria-current={isCategories ? "page" : undefined} className="mobile-tab" href="/categories">
-          <Shapes aria-hidden="true" size={17} />
-          <span>Categories</span>
-        </Link>
-        <Link aria-current={isTransactions ? "page" : undefined} className="mobile-tab" href="/transactions">
-          <ReceiptText aria-hidden="true" size={17} />
-          <span>Transactions</span>
-        </Link>
-      </nav>
-      <Link aria-label="Add transaction" className="mobile-add-button" href="/transactions?new=1"><Plus aria-hidden="true" size={23} /></Link>
+      <FloatingAddButton />
     </div>
   );
 }
