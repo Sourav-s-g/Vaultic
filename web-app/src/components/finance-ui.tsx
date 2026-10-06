@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowDownRight, Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { DATA_COLORS, getCategoryColor, getCategoryIcon } from "@/lib/categories/data";
@@ -9,10 +10,13 @@ import { SessionControls } from "@/components/session-controls";
 import { formatCardAmount } from "@/lib/money/card";
 
 export function AppHeader() {
+  const router = useRouter();
+
   return (
     <header className="app-mobile-header">
       <Link className="app-mobile-title" href="/">Vaultic</Link>
       <div className="app-header-actions">
+        <button className="header-pill" onClick={() => router.refresh()} type="button">Refresh</button>
         <Link className="header-pill" href="/categories">Edit Categories</Link>
         <SessionControls />
       </div>
@@ -49,10 +53,10 @@ export function CategoryCard({
   );
 }
 
-export function CategoryCardStrip({ categories }: { categories: CategoryCardItem[] }) {
+export function CategoryCardStrip({ categories, monthSpentPaise }: { categories: CategoryCardItem[]; monthSpentPaise?: number | null }) {
   return (
     <section aria-label="Category totals" className="category-card-strip">
-      <CategoryCard color={DATA_COLORS.expense} icon={<ArrowDownRight size={20} />} name="This Month Spent" amountPaise={null} href="/transactions" />
+      <CategoryCard color={DATA_COLORS.expense} icon={<ArrowDownRight size={20} />} name="This Month Spent" amountPaise={monthSpentPaise ?? 0} href="/transactions" />
       {categories.map((item) => <CategoryCard key={item.name} {...item} />)}
       <Link aria-label="Add category" className="category-card category-card-add" href="/categories">
         <Plus aria-hidden="true" size={25} /><span>+ Add category</span>

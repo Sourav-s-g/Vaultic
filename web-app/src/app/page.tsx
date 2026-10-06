@@ -1,30 +1,65 @@
 "use client";
 
-import { useEffect } from "react";
+import Link from "next/link";
+import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Landmark, Shapes, Sparkles } from "lucide-react";
+import { CategoryCardStrip, DashboardTabs } from "@/components/finance-ui";
 import { RecentTransactions } from "@/components/transaction-list";
-import { useCategories, useCurrentUserId } from "@/lib/data/hooks";
+import { useCategories, useCurrentUserId, useTransactions } from "@/lib/data/hooks";
+import { getCurrentMonthKey } from "@/lib/finance-summary";
+import type { TransactionRow } from "@/lib/data/finance";
+import { databaseAmountToPaise } from "@/lib/money";
+import { normalizeCategoryName } from "@/lib/categories/data";
+
+function isTransactionDebit(row: TransactionRow): boolean {
+  return row.type === "Debit" && !row.transaction_id.toLowerCase().startsWith("carry-forward-") && !row.description.toLowerCase().startsWith("balance carried forward");
+}
 
 export default function Home() {
   const router = useRouter();
   const user = useCurrentUserId();
   const categories = useCategories(user.data);
+  const transactions = useTransactions(user.data);
+  const monthKey = getCurrentMonthKey();
 
   useEffect(() => {
     if (categories.data && categories.data.length === 0) router.replace("/setup");
   }, [categories.data, router]);
 
-  if (user.isLoading || categories.isLoading) {
+  const rows = useMemo(() => transactions.data?.pages.flatMap((page) => page.items) ?? [], [transactions.data]);
+  const categoryMap = useMemo(() => new Map((categories.data ?? []).map((category) => [normalizeCategoryName(category.name), category])), [categories.data]);
+
+  const categoryTotals = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const row of rows) {
+      if (!isTransactionDebit(row)) continue;
+      if (row.date.slice(0, 7) !== monthKey) continue;
+      const key = normalizeCategoryName(row.category?.trim() || "Other");
+      totals.set(key, (totals.get(key) ?? 0) + databaseAmountToPaise(Number(row.amount)));
+    }
+    return totals;
+  }, [monthKey, rows]);
+
+  const monthSpent = Array.from(categoryTotals.values()).reduce((sum, value) => sum + value, 0);
+  const stripCategories = (categories.data ?? []).map((category) => ({
+    name: category.name,
+    amountPaise: categoryTotals.get(normalizeCategoryName(category.name)) ?? 0,
+    href: `/categories/${encodeURIComponent(category.name)}`,
+  }));
+
+  const unmatchedSpent = rows.filter((row) => isTransactionDebit(row) && row.date.slice(0, 7) === monthKey && !categoryMap.has(normalizeCategoryName(row.category?.trim() || "Other"))).reduce((sum, row) => sum + databaseAmountToPaise(Number(row.amount)), 0);
+  const cardItems = [...stripCategories, ...(unmatchedSpent > 0 ? [{ name: "Other", amountPaise: unmatchedSpent, href: "/categories/all-debit", color: "#9E9E9E" }] : [])];
+
+  if (user.isLoading || categories.isLoading || transactions.isLoading) {
     return <main className="workspace-page" aria-busy="true"><div className="skeleton skeleton-title" /><div className="skeleton skeleton-panel" /></main>;
   }
-  if (user.error || categories.error) {
+  if (user.error || categories.error || transactions.error) {
     return (
       <main className="workspace-page">
         <section className="feature-panel" role="alert">
           <h1>Could not load your workspace</h1>
-          <p>{(user.error ?? categories.error)?.message}</p>
-          <button className="button button-primary" onClick={() => { void user.refetch(); void categories.refetch(); }} type="button">Try again</button>
+          <p>{(user.error ?? categories.error ?? transactions.error)?.message}</p>
+          <button className="button button-primary" onClick={() => { void user.refetch(); void categories.refetch(); void transactions.refetch(); }} type="button">Try again</button>
         </section>
       </main>
     );
@@ -33,24 +68,13 @@ export default function Home() {
 
   return (
     <main className="workspace-page">
-      <section className="workspace-heading" aria-labelledby="overview-heading">
-        <div><p className="eyebrow">PERSONAL FINANCE</p><h1 id="overview-heading">Your workspace</h1><p className="heading-copy">A clear place to manage categories and transaction history.</p></div>
-        <span className="foundation-badge"><span aria-hidden="true" className="status-dot" />Online</span>
+      <section className="feature-heading home-heading" aria-labelledby="home-heading">
+        <div><p className="eyebrow">PERSONAL FINANCE</p><h1 id="home-heading">Home</h1><p className="heading-copy">Your dashboard for spending, categories, and recent activity.</p></div>
       </section>
-      <section className="welcome-surface" aria-label="Workspace status">
-        <div className="welcome-mark" aria-hidden="true"><Landmark size={25} strokeWidth={1.6} /></div>
-        <div className="welcome-copy">
-          <p className="eyebrow">VAULTIC</p>
-          <h2>Your records, organized.</h2>
-          <p>Manage spending categories and maintain a searchable transaction ledger. Dashboard summaries and balances are not part of this phase.</p>
-        </div>
-        <div className="welcome-signals" aria-label="Available capabilities">
-          <div className="signal-row"><Shapes size={17} aria-hidden="true" /><span>Categories</span><span className="signal-state">Ready</span></div>
-          <div className="signal-row"><Sparkles size={17} aria-hidden="true" /><span>Transaction history</span><span className="signal-state">Ready</span></div>
-        </div>
-      </section>
+      <CategoryCardStrip categories={cardItems} monthSpentPaise={monthSpent} />
+      <DashboardTabs />
       <RecentTransactions />
-      <footer className="workspace-footer"><span>Vaultic</span><span>Private by design</span></footer>
+      <div className="panel-heading home-view-all"><h2>Latest activity</h2><Link className="text-button" href="/transactions">View all</Link></div>
     </main>
   );
 }

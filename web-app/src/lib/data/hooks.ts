@@ -15,11 +15,15 @@ import {
   deleteTransaction,
   getAuthenticatedUserId,
   getCategories,
+  getCategoryBudget,
   getCurrentUserId,
+  getInitialBalance,
   getTransactionsPage,
   removeCategory,
   restoreDeletedTransaction,
   updateTransaction,
+  upsertCategoryBudget,
+  deleteCategoryBudget,
   type CategoryRow,
   type NewTransaction,
   type TransactionPage,
@@ -52,6 +56,10 @@ export const financeKeys = {
     all: ["summaries"] as const,
     user: (userId: string) => ["summaries", userId] as const,
   },
+  budgets: {
+    all: ["budgets"] as const,
+    user: (userId: string) => ["budgets", userId] as const,
+  },
 };
 
 type CachedTransactionPages = InfiniteData<TransactionPage, number>;
@@ -81,6 +89,7 @@ function invalidateFinance(client: QueryClient, userId?: string) {
     client.invalidateQueries({ queryKey: financeKeys.transactionsSearch.all }),
     client.invalidateQueries({ queryKey: userId ? financeKeys.balance.user(userId) : financeKeys.balance.all }),
     client.invalidateQueries({ queryKey: userId ? financeKeys.summaries.user(userId) : financeKeys.summaries.all }),
+    client.invalidateQueries({ queryKey: userId ? financeKeys.budgets.user(userId) : financeKeys.budgets.all }),
   ]);
 }
 
@@ -264,6 +273,52 @@ export function useTransactions(userId: string | undefined, search = "") {
     initialPageParam: 0,
     getNextPageParam: (lastPage, _pages, lastOffset) =>
       lastOffset + lastPage.items.length < lastPage.total ? lastOffset + TRANSACTION_PAGE_SIZE : undefined,
+  });
+}
+
+export function useInitialBalance(userId: string | undefined) {
+  return useQuery({
+    queryKey: userId ? financeKeys.balance.user(userId) : financeKeys.balance.all,
+    queryFn: () => (userId ? getInitialBalance(userId) : 0),
+    enabled: Boolean(userId),
+  });
+}
+
+export function useCategoryBudget(userId: string | undefined, category: string) {
+  return useQuery({
+    queryKey: userId ? [...financeKeys.budgets.user(userId), category] : financeKeys.budgets.all,
+    queryFn: () => (userId ? getCategoryBudget(category, userId) : null),
+    enabled: Boolean(userId && category),
+  });
+}
+
+export function useSaveCategoryBudget(userId: string | undefined) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ category, amountPaise }: { category: string; amountPaise: number }) => {
+      if (!userId) throw new Error("Sign in to set a budget.");
+      return upsertCategoryBudget(category, amountPaise, userId);
+    },
+    onSuccess: (_row, variables) => {
+      if (userId) {
+        client.setQueryData<number | null>([...financeKeys.budgets.user(userId), variables.category], variables.amountPaise);
+      }
+    },
+    onSettled: () => invalidateFinance(client, userId),
+  });
+}
+
+export function useDeleteCategoryBudget(userId: string | undefined) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (category: string) => {
+      if (!userId) throw new Error("Sign in to clear a budget.");
+      return deleteCategoryBudget(category, userId);
+    },
+    onSuccess: (_data, category) => {
+      if (userId) client.setQueryData<number | null>([...financeKeys.budgets.user(userId), category], null);
+    },
+    onSettled: () => invalidateFinance(client, userId),
   });
 }
 

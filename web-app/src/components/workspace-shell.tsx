@@ -34,12 +34,12 @@ function ThemeToggle() {
 
 export function WorkspaceShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const isOverview = pathname === "/";
+  const isHome = pathname === "/";
   const isCategories = pathname.startsWith("/categories");
   const isTransactions = pathname.startsWith("/transactions");
   const isAuthRoute = ["/login", "/signup", "/forgot-password", "/reset-password"].includes(pathname);
   const isSetupPage = pathname === "/setup";
-  const currentPage = isCategories ? "Categories" : isTransactions ? "Transactions" : pathname === "/setup" ? "Setup" : "Overview";
+  const currentPage = isCategories ? "Categories" : isTransactions ? "All transactions" : pathname === "/setup" ? "Setup" : "Home";
 
   if (isAuthRoute) return <div className="auth-frame">{children}</div>;
 
@@ -51,17 +51,17 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           <span className="brand-name">Vaultic</span>
         </Link>
         <p className="rail-caption">WORKSPACE</p>
-        <Link aria-current={isOverview ? "page" : undefined} className="rail-link" href="/">
+        <Link aria-current={isHome ? "page" : undefined} className="rail-link" href="/">
           <LayoutDashboard aria-hidden="true" size={17} />
-          <span>Overview</span>
+          <span>Home</span>
+        </Link>
+        <Link aria-current={isTransactions ? "page" : undefined} className="rail-link" href="/transactions">
+          <ReceiptText aria-hidden="true" size={17} />
+          <span>All transactions</span>
         </Link>
         <Link aria-current={isCategories ? "page" : undefined} className="rail-link" href="/categories">
           <Shapes aria-hidden="true" size={17} />
           <span>Categories</span>
-        </Link>
-        <Link aria-current={isTransactions ? "page" : undefined} className="rail-link" href="/transactions">
-          <ReceiptText aria-hidden="true" size={17} />
-          <span>Transactions</span>
         </Link>
         <div className="rail-bottom">
           <span>Appearance</span>

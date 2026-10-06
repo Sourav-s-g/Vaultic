@@ -122,6 +122,53 @@ export async function removeCategory(name: string, expectedUserId: string): Prom
   if (error) throw new Error(`Could not remove category: ${error.message}`);
 }
 
+export async function getInitialBalance(expectedUserId: string): Promise<number> {
+  const userId = await getAuthenticatedUserId(expectedUserId);
+  const { data, error } = await client()
+    .from("user_settings")
+    .select("initial_balance")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw new Error(`Could not load balance: ${error.message}`);
+  return Number(data?.initial_balance ?? 0);
+}
+
+export async function getCategoryBudget(category: string, expectedUserId: string): Promise<number | null> {
+  const userId = await getAuthenticatedUserId(expectedUserId);
+  const { data, error } = await client()
+    .from("budgets")
+    .select("amount")
+    .eq("user_id", userId)
+    .eq("category", category)
+    .maybeSingle();
+  if (error) throw new Error(`Could not load budget: ${error.message}`);
+  return data ? databaseAmountToPaise(Number(data.amount)) : null;
+}
+
+export async function upsertCategoryBudget(category: string, amountPaise: number, expectedUserId: string) {
+  const userId = await getAuthenticatedUserId(expectedUserId);
+  const value = Number(amountPaise);
+  if (!Number.isFinite(value) || value <= 0 || !Number.isInteger(value)) throw new Error("Budget amount must be greater than zero.");
+  const { data, error } = await client()
+    .from("budgets")
+    .upsert({ user_id: userId, category, amount: paiseToDatabaseAmount(value) }, { onConflict: "user_id,category" })
+    .select("*")
+    .maybeSingle();
+  if (error) throw new Error(`Could not save budget: ${error.message}`);
+  if (!data) throw new Error("Budget save did not return a row.");
+  return data;
+}
+
+export async function deleteCategoryBudget(category: string, expectedUserId: string): Promise<void> {
+  const userId = await getAuthenticatedUserId(expectedUserId);
+  const { error } = await client()
+    .from("budgets")
+    .delete()
+    .eq("user_id", userId)
+    .eq("category", category);
+  if (error) throw new Error(`Could not clear budget: ${error.message}`);
+}
+
 function escapeLikePattern(value: string): string {
   return value.replace(/[\\"]/g, "\\$&").replace(/[%_]/g, "\\$&");
 }

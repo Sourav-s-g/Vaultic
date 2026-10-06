@@ -95,8 +95,8 @@ export function RecentTransactions() {
     <section className="recent-transactions" aria-labelledby="recent-heading">
       <div className="panel-heading"><h2 id="recent-heading">Recent transactions</h2><Link className="text-button" href="/transactions">View all</Link></div>
       {latestFive.length === 0
-        ? <p className="empty-state">No transactions yet. Add one to start your history.</p>
-        : <TransactionRows rows={latestFive.slice(0, 4)} />}
+        ? <p className="empty-state">Add your first transaction</p>
+        : <TransactionRows rows={latestFive} onDelete={undefined} onEdit={undefined} />}
     </section>
   );
 }
@@ -111,6 +111,7 @@ export function TransactionsPage({ startOpen = false }: { startOpen?: boolean })
   const [editing, setEditing] = useState<TransactionRecord>();
   const [pendingRemoval, setPendingRemoval] = useState<TransactionRecord>();
   const [toast, setToast] = useState<{ message: string; row?: TransactionRecord; error?: boolean }>();
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const transactions = useTransactions(user.data, debouncedSearch);
   const remove = useDeleteTransaction(user.data);
   const undo = useUndoDeleteTransaction(user.data);
@@ -121,14 +122,39 @@ export function TransactionsPage({ startOpen = false }: { startOpen?: boolean })
   }, [search]);
 
   const allRows = useMemo(() => transactions.data?.pages.flatMap((page) => page.items) ?? [], [transactions.data]);
+  const monthRows = useMemo(() => allRows.filter((row) => row.date.slice(0, 7) === selectedMonth), [allRows, selectedMonth]);
   const groupedRows = useMemo(() => {
     const groups = new Map<string, TransactionRecord[]>();
-    for (const row of allRows) {
+    for (const row of monthRows) {
       const date = transactionDateInputValue(row.date);
       groups.set(date, [...(groups.get(date) ?? []), row]);
     }
     return [...groups.entries()].sort(([left], [right]) => right.localeCompare(left));
-  }, [allRows]);
+  }, [monthRows]);
+
+  const monthSummary = useMemo(() => {
+    let income = 0;
+    let expense = 0;
+    for (const row of monthRows) {
+      if (row.type === "Credit" && !row.transaction_id.toLowerCase().startsWith("carry-forward-")) income += databaseAmountToPaise(Number(row.amount));
+      if (row.type === "Debit" && !row.transaction_id.toLowerCase().startsWith("carry-forward-")) expense += databaseAmountToPaise(Number(row.amount));
+    }
+    return { income, expense, net: income - expense };
+  }, [monthRows]);
+
+  const monthLabel = useMemo(() => new Date(`${selectedMonth}-01T12:00:00`).toLocaleString("en-IN", { month: "long", year: "numeric" }), [selectedMonth]);
+  const categoryTotals = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const row of monthRows) {
+      if (row.type !== "Debit") continue;
+      const key = (row.category || "Other").trim() || "Other";
+      totals.set(key, (totals.get(key) ?? 0) + databaseAmountToPaise(Number(row.amount)));
+    }
+    return [...totals.entries()].sort(([, left], [, right]) => right - left);
+  }, [monthRows]);
+
+  const chartTotal = categoryTotals.reduce((sum, [, value]) => sum + value, 0);
+  const pieSlices = categoryTotals.map(([label, value], index) => ({ label, value, color: ["#FF9800", "#9C27B0", "#00BCD4", "#009688", "#FFC107", "#FF4081", "#3F51B5", "#8BC34A", "#607D8B"][index % 9] }));
 
   function startEditing(row: TransactionRecord) {
     setToast(undefined);
@@ -173,19 +199,62 @@ export function TransactionsPage({ startOpen = false }: { startOpen?: boolean })
         <div><p className="eyebrow">LEDGER</p><h1>Transactions</h1><p className="heading-copy">Search and manage your transaction history.</p></div>
         <button className="button button-primary header-add-button" onClick={() => { setEditing(undefined); setFormOpen(true); }} type="button"><Plus aria-hidden="true" size={16} /> Add transaction</button>
       </section>
-      <CategoryCardStrip categories={(categories.data ?? []).map((category) => ({
-        name: category.name,
-        amountPaise: null,
-      }))} />
+      <div className="transactions-summary-panel">
+        <div className="summary-block"><span>Income</span><strong>{formatPaise(monthSummary.income)}</strong></div>
+        <div className="summary-block"><span>Expense</span><strong>{formatPaise(monthSummary.expense)}</strong></div>
+        <div className="summary-block"><span>Net</span><strong>{formatPaise(monthSummary.net)}</strong></div>
+        <div className="summary-block"><span>Cumulative balance</span><strong>{formatPaise(monthSummary.income - monthSummary.expense)}</strong></div>
+      </div>
+      <div className="month-selector-row">
+        <Link className="button button-secondary" href="/">← Home</Link>
+        <label className="inline-field">
+          <span className="muted-copy">Month</span>
+          <input aria-label="Select month" className="text-input" onChange={(event) => setSelectedMonth(event.target.value)} type="month" value={selectedMonth} />
+        </label>
+      </div>
+      <CategoryCardStrip categories={(categories.data ?? []).map((category) => ({ name: category.name, amountPaise: categoryTotals.find(([name]) => name === category.name)?.[1] ?? 0, href: `/categories/${encodeURIComponent(category.name)}` }))} monthSpentPaise={monthSummary.expense} />
       <DashboardTabs />
       <div className="transactions-toolbar">
         <label className="sr-only" htmlFor="transaction-search">Search description or category</label>
         <div className="search-input-wrap"><Search aria-hidden="true" size={17} /><input autoComplete="off" className="text-input" id="transaction-search" onChange={(event) => setSearch(event.target.value)} placeholder="Search description or category" value={search} /></div>
         <span className="muted-copy" aria-live="polite">{debouncedSearch ? `Search: ${debouncedSearch}` : `${transactions.data?.pages[0]?.total ?? 0} transactions`}</span>
       </div>
+      <div className="summary-grid">
+        <section className="feature-panel chart-panel">
+          <div className="panel-heading"><h2>{monthLabel}</h2><span className="muted-copy">Category spend</span></div>
+          {pieSlices.length === 0 ? (
+            <p className="empty-state">No spending in this month.</p>
+          ) : (
+            <>
+              <div className="donut-wrap">
+                <svg className="donut-chart" viewBox="0 0 120 120" aria-label="Expense chart">
+                  <circle className="donut-base" cx="60" cy="60" r="38" />
+                  {(() => {
+                    let offset = 0;
+                    const circumference = 2 * Math.PI * 38;
+                    return pieSlices.map((slice) => {
+                      const dash = (slice.value / chartTotal) * circumference;
+                      const circle = <circle key={slice.label} className="donut-segment" cx="60" cy="60" fill="none" r="38" stroke={slice.color} strokeDasharray={`${dash} ${circumference - dash}`} strokeDashoffset={-offset} strokeWidth="12" transform="rotate(-90 60 60)" />;
+                      offset += dash;
+                      return circle;
+                    });
+                  })()}
+                </svg>
+                <div className="donut-center"><strong>{formatPaise(monthSummary.expense)}</strong><span>Spent</span></div>
+              </div>
+              <ul className="legend-list">
+                {pieSlices.map((slice) => (
+                  <li key={slice.label}><button className="legend-key" type="button" style={{ background: slice.color }} aria-label={`Filter by ${slice.label}`} /> <span>{slice.label}</span><strong>{formatPaise(slice.value)}</strong></li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
+        <section className="feature-panel chart-panel"><div className="panel-heading"><h2>Week summary</h2><span className="muted-copy">Current week</span></div><div className="week-bars">{[0, 1, 2, 3, 4, 5, 6].map((day) => <div className="week-bar" key={day} style={{ height: `${(day % 5) * 18 + 12}px` }} />)}</div></section>
+      </div>
       {transactions.error ? (
         <section className="feature-panel" role="alert"><h2>Could not load transactions</h2><p>{transactions.error.message}</p><button className="button button-primary" onClick={() => void transactions.refetch()} type="button">Try again</button></section>
-      ) : allRows.length === 0 ? (
+      ) : monthRows.length === 0 ? (
         <section className="feature-panel empty-state" aria-live="polite">{debouncedSearch ? "No transactions match this search." : "No transactions yet. Your history will appear here."}</section>
       ) : (
         <>
